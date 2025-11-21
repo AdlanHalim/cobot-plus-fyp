@@ -1,0 +1,42 @@
+{
+  "name": "my-next-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@heroicons/react": "^2.2.0",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@supabase/auth-helpers-nextjs": "^0.10.0",
+    "@supabase/auth-helpers-react": "^0.5.0",
+    "@supabase/functions-js": "^2.75.1",
+    "@supabase/supabase-js": "^2.79.0",
+    "axios": "^1.9.0",
+    "chart.js": "^4.5.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "file-saver": "^2.0.5",
+    "framer-motion": "^12.12.1",
+    "lucide-react": "^0.548.0",
+    "next": "15.3.2",
+    "nodemailer": "^7.0.9",
+    "react": "^19.0.0",
+    "react-chartjs-2": "^5.3.1",
+    "react-dom": "^19.0.0",
+    "react-modal": "^3.16.3",
+    "react-toastify": "^11.0.5",
+    "recharts": "^3.1.2",
+    "supabase": "^2.54.10",
+    "tailwind-merge": "^3.3.1",
+    "tailwindcss-animate": "^1.0.7"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.3.5"
+  }
+}

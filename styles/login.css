@@ -1,0 +1,126 @@
+/* General Layout */
+.login-container {
+  display: flex;
+  height: 100vh;
+}
+
+/* Left Section (Login Form) */
+.left-section {
+  flex: 1;
+  background-color: white;
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
+
+.login-form {
+  width: 100%;
+  max-width: 380px;
+  padding: 30px;
+  border-radius: 12px;
+  background-color: #ffffff;
+  box-sizing: border-box;
+  border: 1px solid #e5e7eb;
+  text-align: center;
+}
+
+.login-branding {
+  font-family: 'Orbitron', monospace;
+  font-weight: 700;
+  font-size: 1.8rem;
+  color: #1e40af;
+  margin-bottom: 24px;
+}
+
+.role-selection {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.role-label {
+  margin: 0 10px;
+}
+
+.input-label {
+  display: block;
+  text-align: left;
+  margin-bottom: 6px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.input-field {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 18px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 1rem;
+}
+
+.login-button {
+  width: 100%;
+  padding: 14px;
+  background: #2563eb;
+  color: white;
+  border-radius: 10px;
+  border: none;
+  font-weight: 700;
+}
+
+.signup-prompt {
+  margin-top: 20px;
+  font-size: 1rem;
+  color: #475569;
+}
+
+/* Right Section (CTA) */
+.right-section {
+  background-color: #3b82f6;
+  color: white;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
+}
+
+.right-section h2 {
+  font-size: 2rem;
+  margin-bottom: 10px;
+}
+
+.right-section p {
+  font-size: 1.1rem;
+  margin-bottom: 20px;
+}
+
+.cta-button {
+  background-color: #1e40af;
+  color: white;
+  font-size: 1.1rem;
+  padding: 10px 20px;
+  border-radius: 30px;
+  cursor: pointer;
+}
+
+/* Responsive tweaks */
+@media (max-width: 768px) {
+  .login-container {
+    flex-direction: column;
+  }
+
+  .left-section,
+  .right-section {
+    width: 100%;
+  }
+
+  .login-form {
+    max-width: 100%;
+    padding: 20px;
+  }
+}

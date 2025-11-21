@@ -1,0 +1,186 @@
+/* Container for the Analysis Page */
+.container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 30px;
+  max-width: 1200px;
+  width: 100%;
+  padding: 40px 20px;
+  height: calc(100vh - 80px); /* Adjust for navbar */
+  margin: 0 auto;
+  flex-wrap: wrap;
+}
+
+/* Chart section */
+.chart-section {
+  flex: 3; /* Larger portion for the chart */
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+  padding: 2rem;
+  height: 100%;
+  border: 1px solid #e2e8f0; /* Light border for separation */
+  transition: box-shadow 0.3s ease-in-out;
+}
+
+/* Hover effect for chart section */
+.chart-section:hover {
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* Heading */
+.form-heading {
+  font-size: 1.8rem;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+/* Chart - Responsive */
+.chart-section .recharts-wrapper {
+  max-width: 100%;
+  height: 400px;
+}
+
+/* Student info section */
+.info-section {
+  flex: 1; /* Smaller section for student details */
+  background-color: #f9fafb;
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  height: 100%;
+  border: 1px solid #e2e8f0;
+  transition: box-shadow 0.3s ease-in-out;
+}
+
+/* Hover effect for info section */
+.info-section:hover {
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* Form input and button styles */
+.form-label {
+  font-size: 1rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  color: #555;
+}
+
+.form-input {
+  padding: 12px;
+  font-size: 1rem;
+  border: 2px solid #cbd5e1;
+  border-radius: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  background-color: #f9fafb;
+  transition: border-color 0.3s ease;
+}
+
+/* Form input focus state */
+.form-input:focus {
+  border-color: #3182ce;
+  outline: none;
+  box-shadow: 0 0 6px rgba(49, 130, 206, 0.5);
+}
+
+/* Submit button */
+.submit-button {
+  padding: 12px;
+  font-size: 1rem;
+  border-radius: 8px;
+  width: 100%;
+  cursor: pointer;
+  border: none;
+  background-color: #3182ce;
+  color: white;
+  font-weight: 600;
+  transition: background-color 0.3s ease;
+}
+
+.submit-button:hover {
+  background-color: #2b6cb0;
+}
+
+/* Error and Success Feedback */
+.feedback-message {
+  padding: 12px;
+  font-size: 1rem;
+  margin-top: 1rem;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.feedback-message.success {
+  background-color: #38a169;
+  color: white;
+}
+
+.feedback-message.error {
+  background-color: #e53e3e;
+  color: white;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .container {
+    flex-direction: column;
+    height: auto;
+  }
+
+  .chart-section {
+    width: 100%;
+    height: 350px; /* Fixed height for smaller screens */
+    margin-bottom: 20px;
+  }
+
+  .info-section {
+    width: 100%;
+  }
+
+  .submit-button {
+    padding: 10px;
+    font-size: 1rem;
+  }
+
+  .form-heading {
+    font-size: 1.5rem;
+  }
+}
+
+/* Loader styles */
+.loader-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
+
+.loader {
+  border: 4px solid #f3f3f3; 
+  border-top: 4px solid #3182ce; 
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Error Message Styling */
+.error-message {
+  color: red;
+  font-size: 1.2rem;
+  font-weight: bold;
+  text-align: center;
+  margin-top: 20px;
+}
