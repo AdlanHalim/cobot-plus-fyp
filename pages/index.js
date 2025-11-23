@@ -1,8 +1,9 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
+import withRole from "../utils/withRole"; // Import the HOC for role access control
 
-export default function Home() {
+function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [videoError, setVideoError] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -70,7 +71,9 @@ export default function Home() {
   }, []);
 
   const handleToggleStream = () => setIsPaused(!isPaused);
-  const handleEndClass = () => alert("Class ended");
+  
+  // NOTE: Replaced alert() with console.log()
+  const handleEndClass = () => console.log("Class ended");
 
   return (
     <DashboardLayout>
@@ -233,3 +236,6 @@ export default function Home() {
     </DashboardLayout>
   );
 }
+
+// 🔑 Access Control: Restrict access to Admins and Lecturers
+export default withRole(Home, ["admin", "lecturer"]);

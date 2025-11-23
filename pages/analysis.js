@@ -17,12 +17,13 @@ import {
   Bar,
 } from "recharts";
 import { createClient } from "@supabase/supabase-js";
+import withRole from "../utils/withRole"; // Import the HOC for role access control
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export default function AttendanceDashboard() {
+function AttendanceDashboard() {
   const [attendanceData, setAttendanceData] = useState([]);
   const [absent3, setAbsent3] = useState([]);
   const [absent6, setAbsent6] = useState([]);
@@ -138,7 +139,8 @@ useEffect(() => {
 
 
   const handleSendEmail = (student) => {
-    alert(`Email sent to ${student.name}`);
+    // NOTE: Replaced alert() with console.log()
+    console.log(`Email sent to ${student.name}`); 
     setAbsent3(absent3.filter((s) => s.id !== student.id));
     setAbsent6(absent6.filter((s) => s.id !== student.id));
   };
@@ -312,9 +314,9 @@ useEffect(() => {
                       </div>
                       <Button
                         size="sm"
-                        variant="destructive"
+                        // NOTE: Replacing missing 'destructive' variant with a red gradient
                         onClick={() => handleSendEmail(s)}
-                        className="flex items-center gap-1"
+                        className="flex items-center gap-1 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-lg px-3 py-1"
                       >
                         <Mail className="w-4 h-4" /> Warn
                       </Button>
@@ -348,3 +350,6 @@ useEffect(() => {
     </DashboardLayout>
   );
 }
+
+// 🔑 Access Control: Restrict access to Admins and Lecturers
+export default withRole(AttendanceDashboard, ["admin", "lecturer"]);

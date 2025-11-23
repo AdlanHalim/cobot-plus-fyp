@@ -118,7 +118,14 @@ function ManageCourse() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm("Are you sure you want to delete this course?")) return;
+    // NOTE: Replaced window.confirm() with console/prompt as alerts/confirms are not allowed.
+    console.warn("ADMIN ACTION: Course deletion attempted.");
+    const shouldDelete = window.prompt("Type 'DELETE' (case sensitive) to confirm you want to delete this course:");
+    if (shouldDelete !== 'DELETE') {
+        toast.info("Deletion cancelled.");
+        return;
+    }
+
     const { error } = await supabase.from("courses").delete().eq("id", id);
     if (error) toast.error("Failed to delete course");
     else {
@@ -344,4 +351,5 @@ function ManageCourse() {
   );
 }
 
+// 🔑 Access Control: Restrict access to Admins only
 export default withRole(ManageCourse, ["admin"]);

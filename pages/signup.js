@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
-// MODERN IMPORT: Use the client component helper
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 export default function SignUpPage() {
@@ -10,7 +9,6 @@ export default function SignUpPage() {
   const [message, setMessage] = useState("");
   const router = useRouter();
 
-  // MODERN CLIENT: Create the Supabase client inside the component
   const supabase = createClientComponentClient();
 
   const handleSignUp = async (e) => {
@@ -21,46 +19,28 @@ export default function SignUpPage() {
     const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        // You can pass extra user metadata here
-        data: {
-          full_name: "New User", // You can get this from a form field
-        }
-      }
     });
 
     if (signUpError) {
       setMessage(signUpError.message);
       return;
     }
-
-    // 2. Handle the two possible outcomes of signup
-    // If a user object is returned but no session, email confirmation is needed
-    if (data.user && !data.session) {
-      setMessage("Signup successful! Please check your email to confirm your account.");
-      // We don't create a profile in the DB until the user is confirmed
-      return;
-    }
     
-    // If a session is returned, the user is confirmed and logged in
-    if (data.user && data.session) {
-      // 3. Create the user's profile in our 'profiles' table
-      const { error: profileError } = await supabase.from("profiles").insert({
-        id: data.user.id,
-        // CORRECTED: Use 'is_admin' with a boolean value, not 'role'
-        is_admin: false, 
-        full_name: data.user.user_metadata.full_name || "",
-      });
-
-      if (profileError) {
-        console.error("Profile Error:", profileError);
-        setMessage("Account created, but failed to create profile. Please contact support.");
-        return;
+    // 2. Handle the outcome
+    if (data.user) {
+      // The profile creation and default role ('student') assignment 
+      // are now handled securely by the PostgreSQL trigger on the Supabase backend.
+      
+      if (data.session) {
+          // Email confirmation is OFF (user is logged in immediately)
+          setMessage("Signup successful! You are now logged in.");
+      } else {
+          // Email confirmation is ON (user must verify email)
+          setMessage("Signup successful! Please check your email to confirm your account.");
       }
-
-      setMessage("Signup successful! You are now logged in.");
-      // Redirect to the desired page after successful signup
-      router.push('/admin'); 
+      
+      // Redirect to the dashboard, which will handle authentication status.
+      router.push('/'); 
     }
   };
 

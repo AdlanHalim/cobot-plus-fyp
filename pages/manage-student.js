@@ -6,7 +6,7 @@ import ReactModal from "react-modal";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { Cog6ToothIcon } from "@heroicons/react/24/outline";
-import withRole from "../utils/withRole";
+import withRole from "../utils/withRole"; // Ensure this import is present
 
 ReactModal.setAppElement("#__next");
 
@@ -138,6 +138,9 @@ function ManageStudent() {
       border: "1px solid rgba(255,255,255,0.25)",
       boxShadow: "0 8px 25px rgba(0,0,0,0.1)",
     },
+    overlay: {
+        backgroundColor: 'rgba(0, 0, 0, 0.45)'
+    }
   };
 
   if (loading)

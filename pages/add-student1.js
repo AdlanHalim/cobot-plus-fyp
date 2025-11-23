@@ -5,8 +5,9 @@ import axios from "axios";
 import DashboardLayout from "@/components/DashboardLayout";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { motion } from "framer-motion";
+import withRole from "../utils/withRole"; // Import the HOC for role access control
 
-export default function AddStudent() {
+function AddStudent() {
   const [formData, setFormData] = useState({
     matricNo: "",
     fullName: "",
@@ -93,10 +94,11 @@ export default function AddStudent() {
     if (showCamera && navigator.mediaDevices?.getUserMedia) {
       navigator.mediaDevices
         .getUserMedia({ video: true })
+        // NOTE: Changed from alert to console.error as alerts are not permitted in Immersives
         .then((stream) => {
           if (videoRef.current) videoRef.current.srcObject = stream;
         })
-        .catch((err) => alert("Camera access failed: " + err.message));
+        .catch((err) => console.error("Camera access failed: " + err.message));
     }
     return () => {
       if (videoRef.current?.srcObject) {
