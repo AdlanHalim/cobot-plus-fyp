@@ -10,15 +10,17 @@ const Navbar = () => {
   const session = useSession();
   const supabase = useSupabaseClient();
 
+  // State now holds the full profile data, including the role
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
 
   useEffect(() => {
     if (session?.user) {
       const fetchProfile = async () => {
+        // --- FIX: Fetch the 'role' column from your table ---
         const { data, error } = await supabase
           .from("profiles")
-          .select("is_admin")
+          .select("role") // Fetching only the role
           .eq("id", session.user.id)
           .single();
 
@@ -39,15 +41,18 @@ const Navbar = () => {
   };
 
   const links = [
-    { href: "/", label: "Dashboard", roles: ["student", "teacher", "admin"] },
-    { href: "/add-student1", label: "Add Student", roles: ["teacher", "admin"] },
-    { href: "/manage-student", label: "Manage Student", roles: ["teacher", "admin"] },
-    { href: "/manage-course", label: "Manage Course", roles: ["teacher", "admin"] },
-    { href: "/analysis", label: "Analysis", roles: ["student", "teacher", "admin"] },
+    // Roles now match the exact text values in your database constraint
+    { href: "/", label: "Dashboard", roles: ["student", "lecturer", "admin"] },
+    { href: "/add-student1", label: "Add Student", roles: ["lecturer", "admin"] },
+    { href: "/manage-student", label: "Manage Student", roles: [ "admin"] },
+    { href: "/manage-course", label: "Manage Course", roles: ["admin"] },
+    { href: "/analysis", label: "Analysis", roles: ["student", "lecturer", "admin"] },
     { href: "/manage-roles", label: "User Roles", roles: ["admin"] },
   ];
 
-  const userRole = profile?.is_admin ? "admin" : "student";
+  // --- FIX: Use the role text directly from the fetched profile ---
+  // Default to 'student' if profile or role is null/undefined while loading is complete
+  const userRole = profile?.role || "student";
 
   if (profileLoading) {
     return (
@@ -58,6 +63,7 @@ const Navbar = () => {
     );
   }
 
+  // Rest of the component uses the userRole variable for filtering
   return (
     <nav className="fixed top-0 w-full bg-blue-700/80 backdrop-blur-md text-blue-50 shadow-md rounded-b-3xl z-50 border-b border-blue-600/50">
       <div className="max-w-6xl mx-auto flex justify-between items-center px-6 py-4">

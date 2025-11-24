@@ -287,3 +287,13 @@ function AddStudent() {
     </DashboardLayout>
   );
 }
+
+// ---------------------------------------------
+// ✅ CORRECTED EXPORT STATEMENT
+// ---------------------------------------------
+
+// Define the roles allowed to access this page
+const allowedRoles = ['admin', 'lecturer']; 
+
+// Export the component wrapped with the role checker HOC
+export default withRole(AddStudent, allowedRoles);

@@ -1,11 +1,11 @@
 "use client";
 import React, { useState, useEffect } from "react";
-// Using relative path based on file location /pages/admin/users.js
-import DashboardLayout from "../../components/DashboardLayout"; 
+// ✅ CORRECTED PATH: Removed one '..' level
+import DashboardLayout from "../components/DashboardLayout"; 
 // External dependencies
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"; 
 import { toast, ToastContainer } from "react-toastify";
-import withRole from "../../utils/withRole"; 
+import withRole from "../utils/withRole"; 
 import ReactModal from "react-modal";
 import { Cog6ToothIcon } from "@heroicons/react/24/outline";
 
