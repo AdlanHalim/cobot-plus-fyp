@@ -1,299 +1,425 @@
 "use client";
-
-import React, { useState, useRef, useEffect } from "react";
-import axios from "axios";
-import DashboardLayout from "@/components/DashboardLayout";
+import { useState, useEffect } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { motion } from "framer-motion";
-import withRole from "../utils/withRole"; // Import the HOC for role access control
+import DashboardLayout from "@/components/DashboardLayout";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import withRole from "../utils/withRole";
 
-function AddStudent() {
-  const [formData, setFormData] = useState({
-    matricNo: "",
-    fullName: "",
-    nickname: "",
-    email: "",
+function ManageCourse() {
+  const supabase = createClientComponentClient();
+  const [courses, setCourses] = useState([]);
+  const [lecturers, setLecturers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [formError, setFormError] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [search, setSearch] = useState("");
+  const [semesterFilter, setSemesterFilter] = useState("All");
+  const [sessionFilter, setSessionFilter] = useState("All");
+
+  const [form, setForm] = useState({
+    code: "",
+    name: "",
+    credit_hour: "",
+    semester: "",
+    session: "",
+    lecturer_id: "",
+    // NEW: Add state for the new column
+    is_hidden_from_analysis: false, 
   });
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState(false);
-  const [image, setImage] = useState(null);
-  const [showCamera, setShowCamera] = useState(false);
-  const [capturedImage, setCapturedImage] = useState(null);
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const supabase = createClientComponentClient();
-
-  const handleChange = (e) =>
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const { matricNo, fullName, email } = formData;
-    if (!matricNo || !fullName || !email) {
-      setMessage("⚠️ Please fill in Matric No, Name, and Email.");
-      setError(true);
-      return;
-    }
-    setIsSubmitting(true);
-    setMessage("");
-
-    const { error: dbError } = await supabase
-      .from("students")
-      .insert([
-        {
-          id: matricNo,
-          name: fullName,
-          nickname: formData.nickname || null,
-          matric_no: matricNo,
-          email: email,
-        },
-      ])
-      .select();
-
-    if (dbError) {
-      setMessage(dbError.message || "❌ Error saving student data.");
-      setError(true);
-    } else {
-      setMessage("✅ Student added successfully!");
-      setFormData({
-        matricNo: "",
-        fullName: "",
-        nickname: "",
-        email: "",
-      });
-    }
-    setIsSubmitting(false);
+  // Fetch lecturers
+  const fetchLecturers = async () => {
+    const { data, error } = await supabase
+      .from("lecturers")
+      .select("id, name")
+      .order("name");
+    if (error) console.error(error);
+    else setLecturers(data || []);
   };
 
-  const handleImageChange = (e) => {
-    setImage(e.target.files[0]);
-    setCapturedImage(null);
-  };
-
-  const captureImage = () => {
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    if (video && canvas) {
-      const ctx = canvas.getContext("2d");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      setCapturedImage(canvas.toDataURL("image/jpeg"));
-      setShowCamera(false);
-    }
-  };
-
-  const redoCapture = () => {
-    setCapturedImage(null);
-    setShowCamera(true);
+  // Fetch courses (updated to select the new column)
+  const fetchCourses = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("courses")
+      .select(`
+        id, code, name, credit_hour, semester, session, lecturer_id,
+        is_hidden_from_analysis,  // <--- NEW: Select visibility flag
+        lecturers ( name )
+      `)
+      .order("code");
+    if (error) console.error(error);
+    else setCourses(data || []);
+    setLoading(false);
   };
 
   useEffect(() => {
-    if (showCamera && navigator.mediaDevices?.getUserMedia) {
-      navigator.mediaDevices
-        .getUserMedia({ video: true })
-        // NOTE: Changed from alert to console.error as alerts are not permitted in Immersives
-        .then((stream) => {
-          if (videoRef.current) videoRef.current.srcObject = stream;
-        })
-        .catch((err) => console.error("Camera access failed: " + err.message));
-    }
-    return () => {
-      if (videoRef.current?.srcObject) {
-        videoRef.current.srcObject.getTracks().forEach((t) => t.stop());
-      }
-    };
-  }, [showCamera]);
+    fetchLecturers();
+    fetchCourses();
+  }, []);
 
-  const handleImageUpload = async () => {
-    const form = new FormData();
-    const selectedImage = capturedImage || image;
-    if (!selectedImage) {
-      setMessage("⚠️ Please upload or capture an image first.");
-      setError(true);
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    // Handle checkbox change correctly
+    setForm((f) => ({ 
+        ...f, 
+        [name]: type === 'checkbox' ? checked : value 
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setFormError("");
+    if (!form.code || !form.name) {
+      setFormError("Please fill in required fields (Code, Name).");
       return;
     }
 
-    let file;
-    if (capturedImage) {
-      const byteString = atob(capturedImage.split(",")[1]);
-      const ab = new ArrayBuffer(byteString.length);
-      const ia = new Uint8Array(ab);
-      for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-      file = new File([new Blob([ia], { type: "image/jpeg" })], `${formData.matricNo}.jpg`);
-    } else file = image;
-
-    form.append("image", file);
-
     try {
-      const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://192.168.252.103:5000";
-      const res = await axios.post(`${BASE_URL}/upload-image`, form, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      if (res.status === 200) {
-        setMessage("✅ Image uploaded successfully!");
-        setError(false);
+      // Ensure credit_hour is stored as number or null
+      const dataToSave = {
+        ...form,
+        credit_hour: form.credit_hour ? parseInt(form.credit_hour) : null,
+      };
+
+      if (isEditing) {
+        const { error } = await supabase
+          .from("courses")
+          .update(dataToSave)
+          .eq("id", editId);
+        if (error) throw error;
+        toast.success("✅ Course updated successfully");
       } else {
-        setMessage(res.data.error || "❌ Upload failed.");
-        setError(true);
+        const { error } = await supabase.from("courses").insert([dataToSave]);
+        if (error) throw error;
+        toast.success("✅ New course added");
       }
-    } catch (err) {
-      setMessage("❌ Failed to upload image.");
-      setError(true);
+      resetForm();
+      fetchCourses();
+    } catch (error) {
+      console.error(error);
+      setFormError(error.message);
     }
   };
 
+  const resetForm = () => {
+    setForm({
+      code: "",
+      name: "",
+      credit_hour: "",
+      semester: "",
+      session: "",
+      lecturer_id: "",
+      is_hidden_from_analysis: false, // Reset new field
+    });
+    setIsEditing(false);
+    setEditId(null);
+  };
+
+  const startEdit = (course) => {
+    setIsEditing(true);
+    setEditId(course.id);
+    setForm({
+      code: course.code,
+      name: course.name,
+      credit_hour: course.credit_hour || "",
+      semester: course.semester || "",
+      session: course.session || "",
+      lecturer_id: course.lecturer_id || "",
+      is_hidden_from_analysis: course.is_hidden_from_analysis || false, // Set new field
+    });
+  };
+
+  const handleDelete = async (id) => {
+    console.warn("ADMIN ACTION: Course deletion attempted.");
+    const shouldDelete = window.prompt("Type 'DELETE' (case sensitive) to confirm you want to delete this course:");
+    if (shouldDelete !== 'DELETE') {
+        toast.info("Deletion cancelled.");
+        return;
+    }
+
+    const { error } = await supabase.from("courses").delete().eq("id", id);
+    if (error) toast.error("Failed to delete course");
+    else {
+      toast.success("🗑️ Course deleted");
+      setCourses((prev) => prev.filter((c) => c.id !== id));
+    }
+  };
+  
+  // NEW: Toggle Visibility function for the table row
+  const handleToggleVisibility = async (course) => {
+    const newState = !course.is_hidden_from_analysis;
+    
+    const { error } = await supabase
+        .from("courses")
+        .update({ is_hidden_from_analysis: newState })
+        .eq("id", course.id);
+        
+    if (error) {
+        toast.error("Failed to update visibility");
+        console.error(error);
+    } else {
+        toast.success(newState ? "🙈 Course hidden from Analysis filter" : "✅ Course visible in Analysis filter");
+        // Optimistically update the local state
+        setCourses(prev => prev.map(c => 
+            c.id === course.id ? { ...c, is_hidden_from_analysis: newState } : c
+        ));
+    }
+  };
+
+
+  const filteredCourses = courses.filter((c) => {
+    const matchesSearch =
+      c.code.toLowerCase().includes(search.toLowerCase()) ||
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      (c.lecturers?.name || "").toLowerCase().includes(search.toLowerCase());
+
+    const matchesSemester =
+      semesterFilter === "All" || c.semester === semesterFilter;
+
+    const matchesSession =
+      sessionFilter === "All" || c.session === sessionFilter;
+
+    return matchesSearch && matchesSemester && matchesSession;
+  });
+
+  // Unique semester and session values for filters
+  const semesters = [...new Set(courses.map((c) => c.semester).filter(Boolean))];
+  const sessions = [...new Set(courses.map((c) => c.session).filter(Boolean))];
+
+  if (loading)
+    return (
+      <DashboardLayout>
+        <div className="flex justify-center items-center h-full py-20 text-slate-500">
+          Loading course data...
+        </div>
+      </DashboardLayout>
+    );
+
   return (
     <DashboardLayout>
-      {/* Unified gradient background matching theme */}
-      <div className="flex flex-col justify-center items-center h-[calc(100vh-5rem)] bg-gradient-to-br from-indigo-50 via-sky-50 to-teal-50 overflow-hidden px-6">
-        {/* Title */}
-        <motion.h1
-          className="text-2xl md:text-3xl font-bold mb-6 text-center bg-gradient-to-r from-indigo-600 via-sky-600 to-teal-600 bg-clip-text text-transparent"
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          👩‍🎓 Add New Student
-        </motion.h1>
+      <ToastContainer />
+      <div className="min-h-screen p-6 bg-[#e6f0fb] text-slate-700 flex flex-col gap-6">
+        <h1 className="text-3xl font-bold text-center mb-4 bg-gradient-to-r from-indigo-600 via-sky-600 to-teal-600 bg-clip-text text-transparent">
+          📘 Manage Courses
+        </h1>
 
-        {/* Compact Card */}
-        <motion.div
-          className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-6 bg-white/60 backdrop-blur-md border border-slate-200/50 rounded-3xl shadow-lg p-6 md:p-8"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          {/* 🧾 Student Info */}
-          <div>
-            <h2 className="text-lg font-semibold mb-4 text-slate-700">
-              📝 Student Information
-            </h2>
-            <form onSubmit={handleSubmit} className="space-y-3">
-              {[
-                { name: "matricNo", label: "Matric No", type: "text" },
-                { name: "fullName", label: "Full Name", type: "text" },
-                { name: "nickname", label: "Nickname", type: "text" },
-                { name: "email", label: "Email", type: "email" },
-              ].map((f) => (
-                <div key={f.name}>
-                  <label className="block text-slate-600 text-sm mb-1">
-                    {f.label}
-                  </label>
-                  <input
-                    name={f.name}
-                    type={f.type}
-                    value={formData[f.name]}
-                    onChange={handleChange}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-400 outline-none transition"
-                    required={["matricNo", "fullName", "email"].includes(f.name)}
-                  />
-                </div>
-              ))}
-              <button
-                type="submit"
-                className="w-full py-2 mt-2 bg-gradient-to-r from-indigo-500 to-teal-400 hover:scale-[1.02] text-white font-medium text-sm rounded-xl shadow-md transition"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? "Saving..." : "Save Student Info"}
-              </button>
-            </form>
+        {/* Toolbar: Search + Filters + Inline Form */}
+        <div className="flex flex-wrap gap-2 justify-between items-center bg-white/70 backdrop-blur-md border border-slate-200 rounded-xl p-3">
+          {/* ... (Existing search and filter dropdowns remain) ... */}
+          <input
+            type="text"
+            placeholder="Search by code, name, or lecturer..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="flex-1 min-w-[150px] rounded-xl px-3 py-2 bg-white/80 border border-slate-200 focus:ring-2 focus:ring-teal-400 transition text-sm"
+          />
 
-            {message && (
-              <p
-                className={`mt-4 text-center text-sm rounded-lg py-2 ${
-                  error
-                    ? "bg-rose-100 text-rose-700 border border-rose-300"
-                    : "bg-emerald-100 text-emerald-700 border border-emerald-300"
-                }`}
-              >
-                {message}
-              </p>
-            )}
-          </div>
+          <select
+            value={semesterFilter}
+            onChange={(e) => setSemesterFilter(e.target.value)}
+            className="w-24 rounded-xl px-2 py-1 bg-white/80 border border-slate-200 focus:ring-2 focus:ring-indigo-400 text-sm transition"
+          >
+            <option value="All">Semester All</option>
+            {semesters.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
 
-          {/* 📸 Image Upload */}
-          <div className="flex flex-col items-center justify-start">
-            <h2 className="text-lg font-semibold mb-4 text-slate-700">
-              📸 Upload / Capture Image
-            </h2>
+          <select
+            value={sessionFilter}
+            onChange={(e) => setSessionFilter(e.target.value)}
+            className="w-28 rounded-xl px-2 py-1 bg-white/80 border border-slate-200 focus:ring-2 focus:ring-indigo-400 text-sm transition"
+          >
+            <option value="All">Session All</option>
+            {sessions.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
 
-            <label className="w-full text-sm text-slate-600 mb-3">
-              Upload from device:
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageChange}
-                className="mt-1 block w-full text-slate-700 file:mr-2 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 cursor-pointer"
-              />
+          {/* Inline Add/Edit Form - Input Fields */}
+          <input
+            type="text"
+            name="code"
+            placeholder="Code"
+            value={form.code}
+            onChange={handleChange}
+            className="w-20 rounded-xl px-2 py-1 bg-white/80 border border-slate-200 focus:ring-2 focus:ring-indigo-400 text-sm transition"
+          />
+          <input
+            type="text"
+            name="name"
+            placeholder="Name"
+            value={form.name}
+            onChange={handleChange}
+            className="w-36 rounded-xl px-2 py-1 bg-white/80 border border-slate-200 focus:ring-2 focus:ring-indigo-400 text-sm transition"
+          />
+          <input
+            type="number"
+            name="credit_hour"
+            placeholder="Credit"
+            value={form.credit_hour}
+            onChange={handleChange}
+            className="w-16 rounded-xl px-2 py-1 bg-white/80 border border-slate-200 focus:ring-2 focus:ring-indigo-400 text-sm transition"
+          />
+          <input
+            type="text"
+            name="semester"
+            placeholder="Semester"
+            value={form.semester}
+            onChange={handleChange}
+            className="w-20 rounded-xl px-2 py-1 bg-white/80 border border-slate-200 focus:ring-2 focus:ring-indigo-400 text-sm transition"
+          />
+          <input
+            type="text"
+            name="session"
+            placeholder="Session"
+            value={form.session}
+            onChange={handleChange}
+            className="w-28 rounded-xl px-2 py-1 bg-white/80 border border-slate-200 focus:ring-2 focus:ring-indigo-400 text-sm transition"
+          />
+          <select
+            name="lecturer_id"
+            value={form.lecturer_id}
+            onChange={handleChange}
+            className="w-32 rounded-xl px-2 py-1 bg-white/80 border border-slate-200 focus:ring-2 focus:ring-indigo-400 text-sm transition"
+          >
+            <option value="">Lecturer</option>
+            {lecturers.map((lec) => (
+              <option key={lec.id} value={lec.id}>
+                {lec.name}
+              </option>
+            ))}
+          </select>
+          
+          {/* NEW: Visibility Checkbox in Form (only visible during editing/adding) */}
+          <div className="flex items-center space-x-1.5 min-w-[100px]">
+            <input
+                type="checkbox"
+                name="is_hidden_from_analysis"
+                checked={form.is_hidden_from_analysis}
+                onChange={handleChange}
+                id="hide-checkbox"
+                className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+            />
+            <label htmlFor="hide-checkbox" className="text-xs text-slate-600">
+                Hide from Analysis
             </label>
+          </div>
+          
 
-            {!showCamera && !capturedImage && (
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={handleSubmit}
+              className="px-3 py-1 rounded-xl text-white bg-gradient-to-r from-teal-500 to-indigo-500 hover:scale-[1.03] text-sm transition"
+            >
+              {isEditing ? "Update" : "Add"}
+            </button>
+            {isEditing && (
               <button
-                onClick={() => setShowCamera(true)}
-                className="w-full bg-gradient-to-r from-indigo-500 to-sky-500 text-white py-2 rounded-xl text-sm hover:scale-[1.02] transition"
+                type="button"
+                onClick={resetForm}
+                className="px-3 py-1 rounded-xl bg-slate-200/80 hover:bg-slate-300/80 text-sm transition"
               >
-                Open Camera
+                Cancel
               </button>
             )}
-
-            {showCamera && !capturedImage && (
-              <div className="mt-3 text-center">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  muted
-                  playsInline
-                  className="rounded-xl border border-slate-200 shadow-sm mx-auto"
-                  style={{ width: "100%", maxWidth: "280px" }}
-                />
-                <canvas ref={canvasRef} className="hidden"></canvas>
-                <button
-                  onClick={captureImage}
-                  className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded-lg text-sm mt-2"
-                >
-                  Capture
-                </button>
-              </div>
-            )}
-
-            {capturedImage && (
-              <div className="mt-3 text-center">
-                <img
-                  src={capturedImage}
-                  alt="Captured"
-                  className="rounded-xl border border-slate-200 shadow-sm mx-auto"
-                  style={{ width: "100%", maxWidth: "280px" }}
-                />
-                <div className="flex justify-center gap-2 mt-3">
-                  <button
-                    onClick={redoCapture}
-                    className="bg-amber-400 hover:bg-amber-500 text-white px-3 py-1 rounded-lg text-sm"
-                  >
-                    Retake
-                  </button>
-                  <button
-                    onClick={handleImageUpload}
-                    className="bg-sky-500 hover:bg-sky-600 text-white px-3 py-1 rounded-lg text-sm"
-                  >
-                    Upload
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
-        </motion.div>
+        </div>
+
+        {formError && <p className="text-red-500 text-sm">{formError}</p>}
+
+        {/* Courses Table */}
+        <div className="overflow-x-auto bg-white/70 backdrop-blur-md rounded-2xl shadow-md border border-slate-200 p-3">
+          <table className="min-w-full border-collapse text-sm">
+            <thead>
+              <tr className="bg-slate-100/80 text-slate-600 uppercase tracking-wide text-xs">
+                <th className="px-3 py-2 text-left">#</th>
+                <th className="px-3 py-2 text-left">Code</th>
+                <th className="px-3 py-2 text-left">Name</th>
+                <th className="px-3 py-2 text-center">Credit</th>
+                <th className="px-3 py-2 text-center">Semester</th>
+                <th className="px-3 py-2 text-center">Session</th>
+                <th className="px-3 py-2 text-center">Lecturer</th>
+                <th className="px-3 py-2 text-center">Visibility</th> {/* NEW COLUMN */}
+                <th className="px-3 py-2 text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredCourses.length === 0 ? (
+                <tr>
+                  <td colSpan="9" className="text-center py-4 text-slate-500 italic"> {/* Span updated to 9 */}
+                    No courses found.
+                  </td>
+                </tr>
+              ) : (
+                filteredCourses.map((c, i) => (
+                  <tr
+                    key={c.id}
+                    className="border-b border-slate-100 hover:bg-sky-50/60 transition text-sm"
+                  >
+                    <td className="px-3 py-2">{i + 1}</td>
+                    <td className="px-3 py-2 font-semibold">{c.code}</td>
+                    <td className="px-3 py-2">{c.name}</td>
+                    <td className="px-3 py-2 text-center">
+                      <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                        {c.credit_hour || "-"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-center">{c.semester || "-"}</td>
+                    <td className="px-3 py-2 text-center">{c.session || "-"}</td>
+                    <td className="px-3 py-2 text-center">
+                      <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                        {c.lecturers?.name || "-"}
+                      </span>
+                    </td>
+                    
+                    {/* NEW: Visibility Toggle Column */}
+                    <td className="px-3 py-2 text-center">
+                        <button
+                            onClick={() => handleToggleVisibility(c)}
+                            title={c.is_hidden_from_analysis ? "Click to Show" : "Click to Hide"}
+                            className={`px-2 py-0.5 rounded-full text-xs font-medium transition duration-200 ${
+                                c.is_hidden_from_analysis 
+                                    ? 'bg-rose-100 text-rose-700 hover:bg-rose-200' 
+                                    : 'bg-teal-100 text-teal-700 hover:bg-teal-200'
+                            }`}
+                        >
+                            {c.is_hidden_from_analysis ? 'Hidden 🙈' : 'Visible ✅'}
+                        </button>
+                    </td>
+
+                    <td className="px-3 py-2 text-center flex justify-center gap-1">
+                      <button
+                        onClick={() => startEdit(c)}
+                        className="px-2 py-1 rounded-lg text-white bg-gradient-to-r from-yellow-500 to-amber-500 hover:scale-[1.05] text-xs transition"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(c.id)}
+                        className="px-2 py-1 rounded-lg text-white bg-gradient-to-r from-red-500 to-pink-500 hover:scale-[1.05] text-xs transition"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </DashboardLayout>
   );
 }
 
-// ---------------------------------------------
-// ✅ CORRECTED EXPORT STATEMENT
-// ---------------------------------------------
-
-// Define the roles allowed to access this page
-const allowedRoles = ['admin', 'lecturer']; 
-
-// Export the component wrapped with the role checker HOC
-export default withRole(AddStudent, allowedRoles);
+// 🔑 Access Control: Restrict access to Admins only
+export default withRole(ManageCourse, ["admin"]);

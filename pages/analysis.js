@@ -16,130 +16,274 @@ import {
   BarChart,
   Bar,
 } from "recharts";
-import { createClient } from "@supabase/supabase-js";
-import withRole from "../utils/withRole"; // Import the HOC for role access control
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { useSession } from "@supabase/auth-helpers-react";
+import withRole from "../utils/withRole";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabase = createClientComponentClient({ supabaseUrl, supabaseKey: supabaseAnonKey });
 
 function AttendanceDashboard() {
+  const sessionResult = useSession();
+  const sessionData = sessionResult?.data;
+
   const [attendanceData, setAttendanceData] = useState([]);
   const [absent3, setAbsent3] = useState([]);
   const [absent6, setAbsent6] = useState([]);
   const [filters, setFilters] = useState({
-    course: "",
     section: "",
     period: "month",
   });
-  const [courses, setCourses] = useState([]);
-const [sections, setSections] = useState([]);
-const [averageAttendance, setAverageAttendance] = useState(0);
-const [totalStudents, setTotalStudents] = useState(0);
-const [trendDifference, setTrendDifference] = useState(0);
+  
+  const [sections, setSections] = useState([]); 
+  const [averageAttendance, setAverageAttendance] = useState(0);
+  const [totalStudents, setTotalStudents] = useState(0);
+  const [trendDifference, setTrendDifference] = useState(0);
 
+  const [lecturerId, setLecturerId] = useState(undefined); 
+  const [userRole, setUserRole] = useState(null);
+  const [initialLoading, setInitialLoading] = useState(true);
 
-useEffect(() => {
-  async function fetchData() {
-    try {
-      // Load Courses Dropdown
-      const { data: allCourses } = await supabase
-        .from("courses")
-        .select("id, code, name");
+  const setLoadingToEmptyState = () => {
+      setAttendanceData([]);
+      setSections([]);
+      setAverageAttendance(0);
+      setTotalStudents(0);
+      setTrendDifference(0);
+      setAbsent3([]);
+      setAbsent6([]);
+  };
 
-      // Load Sections filtered by course if selected
-      let sectionQuery = supabase.from("sections").select("id, name, course_id");
+  // --- 1. Identify User Role & Lecturer ID (Authentication and ID determination) ---
+  useEffect(() => {
+    if (!sessionResult || sessionResult.isLoading) return; 
 
-      if (filters.course) sectionQuery = sectionQuery.eq("course_id", filters.course);
+    async function getUserData() {
+      if (!sessionData?.session?.user) {
+        setUserRole(null);
+        setLecturerId(null);
+        setInitialLoading(false); 
+        return;
+      }
 
-      const { data: allSections } = await sectionQuery;
+      const user = sessionData.session.user;
 
-      // Attendance Trend (Group by Week)
-      let attendanceQuery = supabase
-        .from("attendance_records")
-        .select(`
-          status,
-          class_sessions!inner(
-            class_date,
-            section_id,
-            sections!inner(course_id)
-          )
-        `);
+      // Fetch role and lecturer_uuid
+      const { data: profileData } = await supabase
+          .from("profiles")
+          .select("role, lecturer_uuid") 
+          .eq("id", user.id)
+          .single();
 
-      // Apply filters
-      if (filters.course) attendanceQuery = attendanceQuery.eq("class_sessions.sections.course_id", filters.course);
-      if (filters.section) attendanceQuery = attendanceQuery.eq("class_sessions.section_id", filters.section);
+      const role = profileData?.role || 'student';
+      setUserRole(role);
 
-      const { data: trend } = await attendanceQuery;
+      let foundLecturerId = null;
 
-      // Trend transform
-      const grouped = {};
-      trend?.forEach(r => {
-        const week = `Week ${Math.ceil(new Date(r.class_sessions.class_date).getDate() / 7)}`;
-        if (!grouped[week]) grouped[week] = { week, total: 0, present: 0 };
-        grouped[week].total += 1;
-        if (r.status === "present") grouped[week].present += 1;
-      });
-
-      const formattedTrend = Object.values(grouped).map(w => ({
-        week: w.week,
-        attendance: Math.round((w.present / w.total) * 100),
-      }));
-
-      setAttendanceData(formattedTrend);
-
-      // ✅ Average Attendance %
-      const total = trend?.length || 0;
-      const present = trend?.filter(r => r.status === "present").length || 0;
-      const average = total > 0 ? Math.round((present / total) * 100) : 0;
-      setAverageAttendance(average);
-
-      // ✅ Total Students (by course and section)
-      let studentQuery = supabase
-        .from("student_section_enrollments")
-        .select("student_id, section_id, sections!inner(course_id)");
-
-      if (filters.course) studentQuery = studentQuery.eq("sections.course_id", filters.course);
-      if (filters.section) studentQuery = studentQuery.eq("section_id", filters.section);
-
-      const { data: students } = await studentQuery;
-      setTotalStudents(new Set(students?.map(s => s.student_id)).size);
-
-      // ✅ Attendance Trend Difference (%)
-      const thisPeriod = average;
-      const lastPeriod = formattedTrend.length > 1 ? formattedTrend[formattedTrend.length - 2].attendance : average;
-      const diff = Math.round(thisPeriod - lastPeriod);
-      setTrendDifference(diff);
-
-      // Load Absences 3 & 6 same as before (unchanged)
-      const { data: abs3 } = await supabase
-        .from("student_course_attendance")
-        .select(`absence_count, student:student_id(name, nickname), course:course_id(code)`)
-        .eq("absence_count", 3);
-
-      setAbsent3(abs3?.map(s => ({ id: s.student_id, name: s.student.nickname, course: s.course.code })));
-
-      const { data: abs6 } = await supabase
-        .from("student_course_attendance")
-        .select(`absence_count, student:student_id(name, nickname), course:course_id(code)`)
-        .eq("absence_count", 6);
-
-      setAbsent6(abs6?.map(s => ({ id: s.student_id, name: s.student.nickname, course: s.course.code })));
+      // Get Lecturer ID directly from the profiles table
+      if (role === 'lecturer') {
+          foundLecturerId = profileData?.lecturer_uuid || null; 
+      } 
       
-      setCourses(allCourses);
-      setSections(allSections);
-
-    } catch (error) {
-      console.error("Fetch Error:", error);
+      // Set final lecturerId state based on role/ID check
+      if (role === 'admin') {
+          setLecturerId(false); // Admin bypass (no filtering)
+      } else {
+          setLecturerId(foundLecturerId); // Sets to UUID or null (unauthorized)
+      }
+      
+      setInitialLoading(false); 
     }
+    getUserData();
+  }, [sessionResult]); 
+
+  // --- 2. Main Data Fetching Effect (Filters data based on determined ID) ---
+  useEffect(() => {
+    if (initialLoading || lecturerId === undefined || userRole === 'student') return;
+
+    if (userRole === 'lecturer' && lecturerId === null) {
+        setLoadingToEmptyState();
+        return; 
+    }
+
+    async function fetchData() {
+      try {
+        const isLecturerFilterNeeded = (userRole === 'lecturer' && lecturerId);
+        
+        // --- DEBUG LOGS ---
+        console.log("--- FETCH START ---");
+        console.log("DEBUG: Current User Role:", userRole);
+        console.log("DEBUG: Current Lecturer ID (UUID/false/null):", lecturerId);
+        console.log("DEBUG: Is Lecturer Filter Needed:", isLecturerFilterNeeded);
+        console.log("-------------------");
+        // --- END DEBUG LOGS ---
+
+
+        // --- A. Load SECTIONS & COURSES Data ---
+        let sectionBaseQuery = supabase
+          .from("sections")
+          .select(`
+            id, 
+            name, 
+            course_id, 
+            lecturer_id,
+            is_hidden_from_analysis,  
+            courses!inner(code)
+          `); 
+
+        
+        // CRITICAL FILTER 1: Apply Lecturer Scope
+        if (isLecturerFilterNeeded) {
+            sectionBaseQuery = sectionBaseQuery.eq("lecturer_id", lecturerId);
+        }
+
+        // ❌ FIX: Apply Visibility Filter (Exclude hidden sections)
+        sectionBaseQuery = sectionBaseQuery.eq("is_hidden_from_analysis", false);
+        
+
+        const { data: baseSections, error: sectionsError } = await sectionBaseQuery;
+        if (sectionsError) throw sectionsError;
+        
+        // Set sections for the dropdown (including course code for clarity)
+        const formattedSections = baseSections.map(s => ({
+            id: s.id,
+            name: `${s.courses.code} - ${s.name}`, 
+            course_id: s.course_id 
+        }));
+        setSections(formattedSections);
+
+
+        // --- B. Attendance Trend Calculation ---
+        let attendanceQuery = supabase
+            .from("attendance_records")
+            .select(`
+                status,
+                class_sessions!inner(
+                    class_date,
+                    section_id,
+                    sections!inner(lecturer_id, is_hidden_from_analysis)
+                )
+            `);
+
+        // Apply Lecturer Filter
+        if (isLecturerFilterNeeded) {
+            attendanceQuery = attendanceQuery.eq("class_sessions.sections.lecturer_id", lecturerId);
+        }
+        
+        // Apply Visibility Filter
+        attendanceQuery = attendanceQuery.eq("class_sessions.sections.is_hidden_from_analysis", false);
+
+        // Apply UI Filter
+        if (filters.section) attendanceQuery = attendanceQuery.eq("class_sessions.section_id", filters.section);
+
+        const { data: trend, error: trendError } = await attendanceQuery;
+        if (trendError) throw trendError;
+        
+        // Trend transform
+        const grouped = {};
+        trend?.forEach(r => {
+            const date = new Date(r.class_sessions.class_date);
+            const week = `Wk ${Math.ceil(date.getDate() / 7)}`; 
+            if (!grouped[week]) grouped[week] = { week, total: 0, present: 0 };
+            grouped[week].total += 1;
+            if (r.status === "present") grouped[week].present += 1;
+        });
+
+        const formattedTrend = Object.values(grouped).map(w => ({
+            week: w.week,
+            attendance: Math.round((w.present / w.total) * 100),
+        }));
+
+        setAttendanceData(formattedTrend);
+
+        // Summary Calculations
+        const total = trend?.length || 0;
+        const present = trend?.filter(r => r.status === "present").length || 0;
+        const average = total > 0 ? Math.round((present / total) * 100) : 0;
+        setAverageAttendance(average);
+
+        // Total Students (Filtered)
+        let studentQuery = supabase
+            .from("student_section_enrollments")
+            .select("student_id, sections!inner(lecturer_id, is_hidden_from_analysis)");
+
+        if (isLecturerFilterNeeded) {
+             studentQuery = studentQuery.eq("sections.lecturer_id", lecturerId);
+        }
+        studentQuery = studentQuery.eq("sections.is_hidden_from_analysis", false);
+        
+        if (filters.section) studentQuery = studentQuery.eq("section_id", filters.section);
+
+        const { data: students } = await studentQuery;
+        setTotalStudents(new Set(students?.map(s => s.student_id)).size);
+
+        // Trend Difference
+        const thisPeriod = average;
+        const lastPeriod = formattedTrend.length > 1 ? formattedTrend[formattedTrend.length - 2].attendance : average;
+        setTrendDifference(Math.round(thisPeriod - lastPeriod));
+
+        // Load Absences 3 & 6 (Keeping same for now)
+        const { data: abs3 } = await supabase
+            .from("student_course_attendance")
+            .select(`absence_count, student:student_id(name, nickname), course:course_id(code)`)
+            .eq("absence_count", 3);
+        setAbsent3(abs3?.map(s => ({ id: s.student_id, name: s.student.nickname, course: s.course.code })));
+
+        const { data: abs6 } = await supabase
+            .from("student_course_attendance")
+            .select(`absence_count, student:student_id(name, nickname), course:course_id(code)`)
+            .eq("absence_count", 6);
+        setAbsent6(abs6?.map(s => ({ id: s.student_id, name: s.student.nickname, course: s.course.code })));
+
+      } catch (error) {
+        console.error("Fetch Error:", error);
+        setLoadingToEmptyState();
+      }
+    }
+
+    fetchData();
+  }, [filters, lecturerId, userRole, initialLoading]); 
+
+  // --- Render Logic (Unchanged) ---
+  if (initialLoading || lecturerId === undefined) {
+      return (
+        <DashboardLayout>
+            <div className="text-center py-20 text-xl font-semibold text-sky-600">Loading user permissions...</div>
+        </DashboardLayout>
+      );
   }
 
-  fetchData();
-}, [filters]);
+  // Unauthorized Lecturer
+  if (userRole === 'lecturer' && lecturerId === null) {
+      return (
+          <DashboardLayout>
+              <div className="flex flex-col items-center justify-center py-20 min-h-[500px]">
+                  <h2 className="text-3xl font-bold text-rose-700 mb-4">Access Denied! 🛑</h2>
+                  <p className="text-lg text-slate-600 mb-2">
+                      Your account is assigned the **Lecturer** role, but your profile is not correctly linked.
+                  </p>
+                  <p className="text-md text-slate-500">
+                      Please contact an administrator to set your `lecturer_uuid` in the profiles table.
+                  </p>
+              </div>
+          </DashboardLayout>
+      );
+  }
+  
+  // Student role check
+  if (userRole === 'student') {
+      return (
+        <DashboardLayout>
+            <div className="text-center py-20 text-xl font-semibold text-gray-500">
+                Data access for students is currently restricted.
+            </div>
+        </DashboardLayout>
+      );
+  }
 
 
   const handleSendEmail = (student) => {
-    // NOTE: Replaced alert() with console.log()
     console.log(`Email sent to ${student.name}`); 
     setAbsent3(absent3.filter((s) => s.id !== student.id));
     setAbsent6(absent6.filter((s) => s.id !== student.id));
@@ -161,6 +305,7 @@ useEffect(() => {
     a.click();
   };
 
+
   return (
     <DashboardLayout>
       <div className="min-h-screen p-6 space-y-6 bg-[#e6f0fb] text-slate-700">
@@ -171,21 +316,14 @@ useEffect(() => {
           </h1>
 
           <div className="flex flex-wrap gap-2 items-center flex-1">
-            <select
-              className="px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white/80 focus:ring-2 focus:ring-teal-400 focus:outline-none"
-                onChange={(e) => setFilters({ ...filters, course: e.target.value })}>
-                  <option value="">All Courses</option>
-                  {courses.map(c => (
-                    <option key={c.id} value={c.id}>{c.code}</option>
-                  ))}
-            </select>
-
+            {/* Section Dropdown (Primary filter) */}
             <select
               className="px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white/80 focus:ring-2 focus:ring-indigo-400 focus:outline-none"
                 onChange={(e) => setFilters({ ...filters, section: e.target.value })}>
-                  <option value="">All Sections</option>
+                  <option value="">Filter by Section</option>
                   {sections.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
+                    // Display includes course code for context
+                    <option key={s.id} value={s.id}>{s.name}</option> 
                   ))}
             </select>
 
@@ -197,46 +335,45 @@ useEffect(() => {
             </Button>
           </div>
         </div>
-
-        {/* Summary Cards */}
+        
+        {/* Summary Cards and Charts (JSX remains the same) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Card className="shadow-md hover:shadow-lg transition-all">
-            <CardHeader className="flex items-center justify-between">
-              <CardTitle>Average Attendance</CardTitle>
-              <BarChart2 className="w-5 h-5 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold text-blue-600">{averageAttendance}%</p>
-              <p className="text-sm text-gray-500 mt-1">This semester</p>
-            </CardContent>
-          </Card>
+            <Card className="shadow-md hover:shadow-lg transition-all">
+                <CardHeader className="flex items-center justify-between">
+                <CardTitle>Average Attendance</CardTitle>
+                <BarChart2 className="w-5 h-5 text-blue-600" />
+                </CardHeader>
+                <CardContent>
+                <p className="text-3xl font-bold text-blue-600">{averageAttendance}%</p>
+                <p className="text-sm text-gray-500 mt-1">This semester</p>
+                </CardContent>
+            </Card>
 
-          <Card className="shadow-md hover:shadow-lg transition-all">
-            <CardHeader className="flex items-center justify-between">
-              <CardTitle>Total Students</CardTitle>
-              <Users className="w-5 h-5 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold text-green-600">{totalStudents}</p>
-              <p className="text-sm text-gray-500 mt-1">Across all sections</p>
-            </CardContent>
-          </Card>
+            <Card className="shadow-md hover:shadow-lg transition-all">
+                <CardHeader className="flex items-center justify-between">
+                <CardTitle>Total Students</CardTitle>
+                <Users className="w-5 h-5 text-green-600" />
+                </CardHeader>
+                <CardContent>
+                <p className="text-3xl font-bold text-green-600">{totalStudents}</p>
+                <p className="text-sm text-gray-500 mt-1">Across all sections</p>
+                </CardContent>
+            </Card>
 
-          <Card className="shadow-md hover:shadow-lg transition-all">
-            <CardHeader className="flex items-center justify-between">
-              <CardTitle>Attendance Trend</CardTitle>
-              <TrendingUp className="w-5 h-5 text-yellow-600" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold text-yellow-600">{trendDifference}%</p>
-              <p className="text-sm text-gray-500 mt-1">Compared to last month</p>
-            </CardContent>
-          </Card>
+            <Card className="shadow-md hover:shadow-lg transition-all">
+                <CardHeader className="flex items-center justify-between">
+                <CardTitle>Attendance Trend</CardTitle>
+                <TrendingUp className="w-5 h-5 text-yellow-600" />
+                </CardHeader>
+                <CardContent>
+                <p className="text-3xl font-bold text-yellow-600">{trendDifference}%</p>
+                <p className="text-sm text-gray-500 mt-1">Compared to last month</p>
+                </CardContent>
+            </Card>
         </div>
 
-        {/* Charts & Absence Lists */}
         <div className="grid lg:grid-cols-3 gap-4">
-          <Card className="lg:col-span-2 shadow-md">
+            <Card className="lg:col-span-2 shadow-md">
             <CardHeader>
               <CardTitle>Attendance Overview</CardTitle>
             </CardHeader>
@@ -273,7 +410,7 @@ useEffect(() => {
                       <div>
                         <p className="font-medium">{s.name}</p>
                         <p className="text-sm text-slate-500">
-                          {s.course} - {s.section}
+                          {s.course}
                         </p>
                       </div>
                       <Button
@@ -309,12 +446,11 @@ useEffect(() => {
                       <div>
                         <p className="font-medium">{s.name}</p>
                         <p className="text-sm text-slate-500">
-                          {s.course} - {s.section}
+                          {s.course}
                         </p>
                       </div>
                       <Button
                         size="sm"
-                        // NOTE: Replacing missing 'destructive' variant with a red gradient
                         onClick={() => handleSendEmail(s)}
                         className="flex items-center gap-1 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-lg px-3 py-1"
                       >
@@ -351,5 +487,4 @@ useEffect(() => {
   );
 }
 
-// 🔑 Access Control: Restrict access to Admins and Lecturers
 export default withRole(AttendanceDashboard, ["admin", "lecturer"]);
