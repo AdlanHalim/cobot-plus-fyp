@@ -1,425 +1,579 @@
 "use client";
-import { useState, useEffect } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+
+import React, { useEffect, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Download, Mail, Users, BarChart2, TrendingUp } from "lucide-react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  Legend, 
+} from "recharts";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { useSession } from "@supabase/auth-helpers-react";
 import withRole from "../utils/withRole";
 
-function ManageCourse() {
-  const supabase = createClientComponentClient();
-  const [courses, setCourses] = useState([]);
-  const [lecturers, setLecturers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [formError, setFormError] = useState("");
-  const [isEditing, setIsEditing] = useState(false);
-  const [editId, setEditId] = useState(null);
-  const [search, setSearch] = useState("");
-  const [semesterFilter, setSemesterFilter] = useState("All");
-  const [sessionFilter, setSessionFilter] = useState("All");
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabase = createClientComponentClient({ supabaseUrl, supabaseKey: supabaseAnonKey });
 
-  const [form, setForm] = useState({
-    code: "",
-    name: "",
-    credit_hour: "",
-    semester: "",
-    session: "",
-    lecturer_id: "",
-    // NEW: Add state for the new column
-    is_hidden_from_analysis: false, 
+// Define the target goal for the chart background line
+const ATTENDANCE_GOAL = 80;
+
+function AttendanceDashboard() {
+  const sessionResult = useSession();
+  const sessionData = sessionResult?.data;
+
+  const [attendanceData, setAttendanceData] = useState([]);
+  const [absent3, setAbsent3] = useState([]);
+  const [absent6, setAbsent6] = useState([]);
+  const [filters, setFilters] = useState({
+    section: "",
+    period: "month",
   });
-
-  // Fetch lecturers
-  const fetchLecturers = async () => {
-    const { data, error } = await supabase
-      .from("lecturers")
-      .select("id, name")
-      .order("name");
-    if (error) console.error(error);
-    else setLecturers(data || []);
-  };
-
-  // Fetch courses (updated to select the new column)
-  const fetchCourses = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("courses")
-      .select(`
-        id, code, name, credit_hour, semester, session, lecturer_id,
-        is_hidden_from_analysis,  // <--- NEW: Select visibility flag
-        lecturers ( name )
-      `)
-      .order("code");
-    if (error) console.error(error);
-    else setCourses(data || []);
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    fetchLecturers();
-    fetchCourses();
-  }, []);
-
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    // Handle checkbox change correctly
-    setForm((f) => ({ 
-        ...f, 
-        [name]: type === 'checkbox' ? checked : value 
-    }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setFormError("");
-    if (!form.code || !form.name) {
-      setFormError("Please fill in required fields (Code, Name).");
-      return;
-    }
-
-    try {
-      // Ensure credit_hour is stored as number or null
-      const dataToSave = {
-        ...form,
-        credit_hour: form.credit_hour ? parseInt(form.credit_hour) : null,
-      };
-
-      if (isEditing) {
-        const { error } = await supabase
-          .from("courses")
-          .update(dataToSave)
-          .eq("id", editId);
-        if (error) throw error;
-        toast.success("✅ Course updated successfully");
-      } else {
-        const { error } = await supabase.from("courses").insert([dataToSave]);
-        if (error) throw error;
-        toast.success("✅ New course added");
-      }
-      resetForm();
-      fetchCourses();
-    } catch (error) {
-      console.error(error);
-      setFormError(error.message);
-    }
-  };
-
-  const resetForm = () => {
-    setForm({
-      code: "",
-      name: "",
-      credit_hour: "",
-      semester: "",
-      session: "",
-      lecturer_id: "",
-      is_hidden_from_analysis: false, // Reset new field
-    });
-    setIsEditing(false);
-    setEditId(null);
-  };
-
-  const startEdit = (course) => {
-    setIsEditing(true);
-    setEditId(course.id);
-    setForm({
-      code: course.code,
-      name: course.name,
-      credit_hour: course.credit_hour || "",
-      semester: course.semester || "",
-      session: course.session || "",
-      lecturer_id: course.lecturer_id || "",
-      is_hidden_from_analysis: course.is_hidden_from_analysis || false, // Set new field
-    });
-  };
-
-  const handleDelete = async (id) => {
-    console.warn("ADMIN ACTION: Course deletion attempted.");
-    const shouldDelete = window.prompt("Type 'DELETE' (case sensitive) to confirm you want to delete this course:");
-    if (shouldDelete !== 'DELETE') {
-        toast.info("Deletion cancelled.");
-        return;
-    }
-
-    const { error } = await supabase.from("courses").delete().eq("id", id);
-    if (error) toast.error("Failed to delete course");
-    else {
-      toast.success("🗑️ Course deleted");
-      setCourses((prev) => prev.filter((c) => c.id !== id));
-    }
-  };
   
-  // NEW: Toggle Visibility function for the table row
-  const handleToggleVisibility = async (course) => {
-    const newState = !course.is_hidden_from_analysis;
-    
-    const { error } = await supabase
-        .from("courses")
-        .update({ is_hidden_from_analysis: newState })
-        .eq("id", course.id);
-        
-    if (error) {
-        toast.error("Failed to update visibility");
-        console.error(error);
-    } else {
-        toast.success(newState ? "🙈 Course hidden from Analysis filter" : "✅ Course visible in Analysis filter");
-        // Optimistically update the local state
-        setCourses(prev => prev.map(c => 
-            c.id === course.id ? { ...c, is_hidden_from_analysis: newState } : c
-        ));
-    }
+  const [sections, setSections] = useState([]); 
+  const [averageAttendance, setAverageAttendance] = useState(0); 
+  const [totalStudents, setTotalStudents] = useState(0);
+  const [trendDifference, setTrendDifference] = useState(0);
+  const [absenceStatusData, setAbsenceStatusData] = useState([]); 
+
+  const [lecturerId, setLecturerId] = useState(undefined); 
+  const [userRole, setUserRole] = useState(null);
+  const [initialLoading, setInitialLoading] = useState(true);
+
+  const setLoadingToEmptyState = () => {
+      setAttendanceData([]);
+      setSections([]);
+      setAverageAttendance(0);
+      setTotalStudents(0);
+      setTrendDifference(0);
+      setAbsent3([]);
+      setAbsent6([]);
   };
 
+  // --- 1. Identify User Role & Lecturer ID (Authentication and ID determination) ---
+  useEffect(() => {
+    if (!sessionResult || sessionResult.isLoading) return; 
 
-  const filteredCourses = courses.filter((c) => {
-    const matchesSearch =
-      c.code.toLowerCase().includes(search.toLowerCase()) ||
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      (c.lecturers?.name || "").toLowerCase().includes(search.toLowerCase());
+    async function getUserData() {
+      if (!sessionData?.session?.user) {
+        setUserRole(null);
+        setLecturerId(null);
+        setInitialLoading(false); 
+        return;
+      }
 
-    const matchesSemester =
-      semesterFilter === "All" || c.semester === semesterFilter;
+      const user = sessionData.session.user;
 
-    const matchesSession =
-      sessionFilter === "All" || c.session === sessionFilter;
+      // Fetch role and lecturer_uuid
+      const { data: profileData } = await supabase
+          .from("profiles")
+          .select("role, lecturer_uuid") 
+          .eq("id", user.id)
+          .single();
 
-    return matchesSearch && matchesSemester && matchesSession;
-  });
+      const role = profileData?.role || 'student';
+      setUserRole(role);
 
-  // Unique semester and session values for filters
-  const semesters = [...new Set(courses.map((c) => c.semester).filter(Boolean))];
-  const sessions = [...new Set(courses.map((c) => c.session).filter(Boolean))];
+      let foundLecturerId = null;
 
-  if (loading)
-    return (
-      <DashboardLayout>
-        <div className="flex justify-center items-center h-full py-20 text-slate-500">
-          Loading course data...
-        </div>
-      </DashboardLayout>
-    );
+      // Get Lecturer ID directly from the profiles table
+      if (role === 'lecturer') {
+          foundLecturerId = profileData?.lecturer_uuid || null; 
+      } 
+      
+      // Set final lecturerId state based on role/ID check
+      if (role === 'admin') {
+          setLecturerId(false); // Admin bypass (no filtering)
+      } else {
+          setLecturerId(foundLecturerId); // Sets to UUID or null (unauthorized)
+      }
+      
+      setInitialLoading(false); 
+    }
+    getUserData();
+  }, [sessionResult]); 
+
+  // --- 2. Main Data Fetching Effect (Filters data based on determined ID) ---
+  useEffect(() => {
+    if (initialLoading || lecturerId === undefined || userRole === 'student') return;
+
+    if (userRole === 'lecturer' && lecturerId === null) {
+        setLoadingToEmptyState();
+        return; 
+    }
+
+    async function fetchData() {
+      try {
+        const isLecturerFilterNeeded = (userRole === 'lecturer' && lecturerId);
+        
+        // --- A. Load SECTIONS Dropdown (with Visibility Filter) ---
+        let sectionBaseQuery = supabase
+          .from("sections")
+          .select(`
+            id, 
+            name, 
+            course_id, 
+            lecturer_id,
+            is_hidden_from_analysis,  
+            courses!inner(code)
+          `); 
+
+        
+        // CRITICAL FILTER 1: Apply Lecturer Scope
+        if (isLecturerFilterNeeded) {
+            sectionBaseQuery = sectionBaseQuery.eq("lecturer_id", lecturerId);
+        }
+
+        // CRITICAL FILTER 2: Apply Visibility Filter (Exclude hidden sections)
+        sectionBaseQuery = sectionBaseQuery.eq("is_hidden_from_analysis", false);
+        
+
+        const { data: baseSections, error: sectionsError } = await sectionBaseQuery;
+        if (sectionsError) throw sectionsError;
+        
+        // Set sections for the dropdown
+        const formattedSections = baseSections.map(s => ({
+            id: s.id,
+            name: `${s.courses.code} - ${s.name}`, 
+            course_id: s.course_id 
+        }));
+        setSections(formattedSections);
+
+
+        // --- B. Attendance Trend Calculation ---
+        let attendanceQuery = supabase
+            .from("attendance_records")
+            .select(`
+                status,
+                class_sessions!inner(
+                    class_date,
+                    section_id,
+                    sections!inner(lecturer_id, is_hidden_from_analysis)
+                )
+            `);
+
+        // Apply Lecturer Filter
+        if (isLecturerFilterNeeded) {
+            attendanceQuery = attendanceQuery.eq("class_sessions.sections.lecturer_id", lecturerId);
+        }
+        
+        // Apply Visibility Filter
+        attendanceQuery = attendanceQuery.eq("class_sessions.sections.is_hidden_from_analysis", false);
+
+        // Apply UI Filter
+        if (filters.section) attendanceQuery = attendanceQuery.eq("class_sessions.section_id", filters.section);
+
+        const { data: trend, error: trendError } = await attendanceQuery;
+        if (trendError) throw trendError;
+        
+        // Trend transform - FIXING THE WEEK ORDERING
+        const grouped = {};
+        trend?.forEach(r => {
+            const date = new Date(r.class_sessions.class_date);
+            const weekIndex = Math.ceil(date.getDate() / 7); 
+            const weekLabel = `Wk ${weekIndex}`;
+
+            if (!grouped[weekIndex]) grouped[weekIndex] = { 
+                weekIndex, 
+                week: weekLabel, 
+                total: 0, 
+                present: 0 
+            };
+            grouped[weekIndex].total += 1;
+            if (r.status === "present") grouped[weekIndex].present += 1;
+        });
+
+        // Calculate percentage, add goal, AND SORT BY NUMERICAL INDEX
+        const formattedTrend = Object.values(grouped)
+            .map(w => ({
+                week: w.week,
+                weekIndex: w.weekIndex, 
+                attendance: Math.round((w.present / w.total) * 100), 
+                goal: ATTENDANCE_GOAL 
+            }))
+            .sort((a, b) => a.weekIndex - b.weekIndex); 
+
+        setAttendanceData(formattedTrend);
+
+        // Summary Calculations
+        const totalRecords = trend?.length || 0;
+        const presentRecords = trend?.filter(r => r.status === "present").length || 0;
+        
+        const overallAverage = totalRecords > 0 ? Math.round((presentRecords / totalRecords) * 100) : 0;
+        setAverageAttendance(overallAverage); 
+
+        // Total Students (Filtered)
+        let studentQuery = supabase
+            .from("student_section_enrollments")
+            .select("student_id, sections!inner(lecturer_id, is_hidden_from_analysis)");
+
+        if (isLecturerFilterNeeded) {
+             studentQuery = studentQuery.eq("sections.lecturer_id", lecturerId);
+        }
+        studentQuery = studentQuery.eq("sections.is_hidden_from_analysis", false);
+        
+        if (filters.section) studentQuery = studentQuery.eq("section_id", filters.section);
+
+        const { data: students } = await studentQuery;
+        setTotalStudents(new Set(students?.map(s => s.student_id)).size);
+
+        // Trend Difference (Percentage Change between the last two weeks)
+        const currentWeekAvg = formattedTrend.length > 0 ? formattedTrend[formattedTrend.length - 1].attendance : 0;
+        const previousWeekAvg = formattedTrend.length > 1 ? formattedTrend[formattedTrend.length - 2].attendance : 0;
+        const diffPercent = Math.round(currentWeekAvg - previousWeekAvg);
+        setTrendDifference(diffPercent);
+
+        // --- C. ACTIONABLE FIX: Load Absences 3 & 6 Filtered DIRECTLY by Section ID ---
+        
+        const targetSectionId = filters.section;
+        
+        if (targetSectionId) {
+            // 1. Fetch 3 Absences
+            let absenceQuery3 = supabase
+                .from("student_course_attendance")
+                .select(`
+                    absence_count, 
+                    student:student_id(id, name, nickname), 
+                    sections!inner(courses!inner(code))
+                `)
+                .eq("section_id", targetSectionId) // ✅ DIRECT SECTION FILTER
+                .eq("absence_count", 3);
+            
+            // 2. Fetch 6 Absences
+            let absenceQuery6 = supabase
+                .from("student_course_attendance")
+                .select(`
+                    absence_count, 
+                    student:student_id(id, name, nickname), 
+                    sections!inner(courses!inner(code))
+                `)
+                .eq("section_id", targetSectionId) // ✅ DIRECT SECTION FILTER
+                .eq("absence_count", 6);
+                
+            const { data: abs3Data } = await absenceQuery3;
+            const { data: abs6Data } = await absenceQuery6;
+
+            // Map data, extracting Course Code via the Section join
+            const mapAbsences = (data) => (data || []).map(s => ({ 
+                id: s.student.id, 
+                name: s.student.nickname || s.student.name, 
+                course: s.sections.courses.code, // Course code via section join
+                section_id: targetSectionId
+            }));
+
+            const absent3List = mapAbsences(abs3Data);
+            const absent6List = mapAbsences(abs6Data);
+
+            setAbsent3(absent3List);
+            setAbsent6(absent6List);
+            
+            // Update Absence Status Data for the bar chart
+            setAbsenceStatusData([
+                {
+                    name: 'Intervention Required',
+                    '3+ Absences': absent3List.length,
+                    '6+ Absences': absent6List.length,
+                }
+            ]);
+
+        } else {
+            // No section selected, clear lists and chart data
+            setAbsent3([]);
+            setAbsent6([]);
+            setAbsenceStatusData([]); 
+        }
+
+
+      } catch (error) {
+        console.error("Fetch Error:", error);
+        setLoadingToEmptyState();
+      }
+    }
+
+    fetchData();
+  }, [filters, lecturerId, userRole, initialLoading]); 
+
+  // --- Render Logic ---
+  if (initialLoading || lecturerId === undefined) {
+      return (
+        <DashboardLayout>
+            <div className="text-center py-20 text-xl font-semibold text-sky-600">Loading user permissions...</div>
+        </DashboardLayout>
+      );
+  }
+
+  // Unauthorized Lecturer
+  if (userRole === 'lecturer' && lecturerId === null) {
+      return (
+          <DashboardLayout>
+              <div className="flex flex-col items-center justify-center py-20 min-h-[500px]">
+                  <h2 className="text-3xl font-bold text-rose-700 mb-4">Access Denied! 🛑</h2>
+                  <p className="text-lg text-slate-600 mb-2">
+                      Your account is assigned the **Lecturer** role, but your profile is not correctly linked.
+                  </p>
+                  <p className="text-md text-slate-500">
+                      Please contact an administrator to set your `lecturer_uuid` in the profiles table.
+                  </p>
+              </div>
+          </DashboardLayout>
+      );
+  }
+  
+  // Student role check
+  if (userRole === 'student') {
+      return (
+        <DashboardLayout>
+            <div className="text-center py-20 text-xl font-semibold text-gray-500">
+                Data access for students is currently restricted.
+            </div>
+        </DashboardLayout>
+      );
+  }
+
+
+  const handleSendEmail = (student) => {
+    console.log(`Email sent to ${student.name} in section ${student.section_id}`); 
+    setAbsent3(absent3.filter((s) => s.id !== student.id));
+    setAbsent6(absent6.filter((s) => s.id !== student.id));
+  };
+
+  const handleExportCSV = () => {
+    const headers = "Week,Attendance Percentage\n";
+    const rows = attendanceData
+      .map((row) => `${row.week},${row.attendance}`)
+      .join("\n");
+    const csv = headers + rows;
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "attendance_report.csv";
+    a.click();
+  };
+
 
   return (
     <DashboardLayout>
-      <ToastContainer />
-      <div className="min-h-screen p-6 bg-[#e6f0fb] text-slate-700 flex flex-col gap-6">
-        <h1 className="text-3xl font-bold text-center mb-4 bg-gradient-to-r from-indigo-600 via-sky-600 to-teal-600 bg-clip-text text-transparent">
-          📘 Manage Courses
+      <div className="min-h-screen p-6 space-y-6 bg-[#e6f0fb] text-slate-700">
+        <h1 className="text-2xl font-semibold sm:mr-4 bg-gradient-to-r from-indigo-600 via-sky-600 to-teal-600 bg-clip-text text-transparent">
+          📊 Attendance Analysis Report
         </h1>
-
-        {/* Toolbar: Search + Filters + Inline Form */}
-        <div className="flex flex-wrap gap-2 justify-between items-center bg-white/70 backdrop-blur-md border border-slate-200 rounded-xl p-3">
-          {/* ... (Existing search and filter dropdowns remain) ... */}
-          <input
-            type="text"
-            placeholder="Search by code, name, or lecturer..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 min-w-[150px] rounded-xl px-3 py-2 bg-white/80 border border-slate-200 focus:ring-2 focus:ring-teal-400 transition text-sm"
-          />
-
-          <select
-            value={semesterFilter}
-            onChange={(e) => setSemesterFilter(e.target.value)}
-            className="w-24 rounded-xl px-2 py-1 bg-white/80 border border-slate-200 focus:ring-2 focus:ring-indigo-400 text-sm transition"
-          >
-            <option value="All">Semester All</option>
-            {semesters.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={sessionFilter}
-            onChange={(e) => setSessionFilter(e.target.value)}
-            className="w-28 rounded-xl px-2 py-1 bg-white/80 border border-slate-200 focus:ring-2 focus:ring-indigo-400 text-sm transition"
-          >
-            <option value="All">Session All</option>
-            {sessions.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-
-          {/* Inline Add/Edit Form - Input Fields */}
-          <input
-            type="text"
-            name="code"
-            placeholder="Code"
-            value={form.code}
-            onChange={handleChange}
-            className="w-20 rounded-xl px-2 py-1 bg-white/80 border border-slate-200 focus:ring-2 focus:ring-indigo-400 text-sm transition"
-          />
-          <input
-            type="text"
-            name="name"
-            placeholder="Name"
-            value={form.name}
-            onChange={handleChange}
-            className="w-36 rounded-xl px-2 py-1 bg-white/80 border border-slate-200 focus:ring-2 focus:ring-indigo-400 text-sm transition"
-          />
-          <input
-            type="number"
-            name="credit_hour"
-            placeholder="Credit"
-            value={form.credit_hour}
-            onChange={handleChange}
-            className="w-16 rounded-xl px-2 py-1 bg-white/80 border border-slate-200 focus:ring-2 focus:ring-indigo-400 text-sm transition"
-          />
-          <input
-            type="text"
-            name="semester"
-            placeholder="Semester"
-            value={form.semester}
-            onChange={handleChange}
-            className="w-20 rounded-xl px-2 py-1 bg-white/80 border border-slate-200 focus:ring-2 focus:ring-indigo-400 text-sm transition"
-          />
-          <input
-            type="text"
-            name="session"
-            placeholder="Session"
-            value={form.session}
-            onChange={handleChange}
-            className="w-28 rounded-xl px-2 py-1 bg-white/80 border border-slate-200 focus:ring-2 focus:ring-indigo-400 text-sm transition"
-          />
-          <select
-            name="lecturer_id"
-            value={form.lecturer_id}
-            onChange={handleChange}
-            className="w-32 rounded-xl px-2 py-1 bg-white/80 border border-slate-200 focus:ring-2 focus:ring-indigo-400 text-sm transition"
-          >
-            <option value="">Lecturer</option>
-            {lecturers.map((lec) => (
-              <option key={lec.id} value={lec.id}>
-                {lec.name}
-              </option>
-            ))}
-          </select>
-          
-          {/* NEW: Visibility Checkbox in Form (only visible during editing/adding) */}
-          <div className="flex items-center space-x-1.5 min-w-[100px]">
-            <input
-                type="checkbox"
-                name="is_hidden_from_analysis"
-                checked={form.is_hidden_from_analysis}
-                onChange={handleChange}
-                id="hide-checkbox"
-                className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-            />
-            <label htmlFor="hide-checkbox" className="text-xs text-slate-600">
-                Hide from Analysis
-            </label>
-          </div>
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/50 backdrop-blur-md rounded-xl p-4 shadow-md border border-slate-200">
           
 
-          <div className="flex gap-1">
-            <button
-              type="button"
-              onClick={handleSubmit}
-              className="px-3 py-1 rounded-xl text-white bg-gradient-to-r from-teal-500 to-indigo-500 hover:scale-[1.03] text-sm transition"
+          <div className="flex flex-wrap gap-2 items-center flex-1">
+            {/* Section Dropdown (Primary filter) */}
+            <select
+              className="px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white/80 focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                onChange={(e) => setFilters({ ...filters, section: e.target.value })}>
+                  <option value="">Filter by Section</option>
+                  {sections.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option> 
+                  ))}
+            </select>
+
+            <Button
+              onClick={handleExportCSV}
+              className="flex items-center gap-2 bg-gradient-to-r from-teal-500 to-indigo-500 hover:scale-[1.03] text-white rounded-xl text-sm px-4 py-2"
             >
-              {isEditing ? "Update" : "Add"}
-            </button>
-            {isEditing && (
-              <button
-                type="button"
-                onClick={resetForm}
-                className="px-3 py-1 rounded-xl bg-slate-200/80 hover:bg-slate-300/80 text-sm transition"
-              >
-                Cancel
-              </button>
-            )}
+              <Download className="w-4 h-4" /> Export Report Data
+            </Button>
           </div>
         </div>
+        
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <Card className="shadow-md hover:shadow-lg transition-all">
+                <CardHeader className="flex items-center justify-between">
+                <CardTitle>Overall Attendance</CardTitle>
+                <BarChart2 className="w-5 h-5 text-blue-600" />
+                </CardHeader>
+                <CardContent>
+                <p className="text-3xl font-bold text-blue-600">{averageAttendance}%</p>
+                <p className="text-sm text-gray-500 mt-1">Average across filtered period</p>
+                </CardContent>
+            </Card>
 
-        {formError && <p className="text-red-500 text-sm">{formError}</p>}
+            <Card className="shadow-md hover:shadow-lg transition-all">
+                <CardHeader className="flex items-center justify-between">
+                <CardTitle>Total Students</CardTitle>
+                <Users className="w-5 h-5 text-green-600" />
+                </CardHeader>
+                <CardContent>
+                <p className="text-3xl font-bold text-green-600">{totalStudents}</p>
+                <p className="text-sm text-gray-500 mt-1">Total enrolled students</p>
+                </CardContent>
+            </Card>
 
-        {/* Courses Table */}
-        <div className="overflow-x-auto bg-white/70 backdrop-blur-md rounded-2xl shadow-md border border-slate-200 p-3">
-          <table className="min-w-full border-collapse text-sm">
-            <thead>
-              <tr className="bg-slate-100/80 text-slate-600 uppercase tracking-wide text-xs">
-                <th className="px-3 py-2 text-left">#</th>
-                <th className="px-3 py-2 text-left">Code</th>
-                <th className="px-3 py-2 text-left">Name</th>
-                <th className="px-3 py-2 text-center">Credit</th>
-                <th className="px-3 py-2 text-center">Semester</th>
-                <th className="px-3 py-2 text-center">Session</th>
-                <th className="px-3 py-2 text-center">Lecturer</th>
-                <th className="px-3 py-2 text-center">Visibility</th> {/* NEW COLUMN */}
-                <th className="px-3 py-2 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredCourses.length === 0 ? (
-                <tr>
-                  <td colSpan="9" className="text-center py-4 text-slate-500 italic"> {/* Span updated to 9 */}
-                    No courses found.
-                  </td>
-                </tr>
+            <Card className="shadow-md hover:shadow-lg transition-all">
+                <CardHeader className="flex items-center justify-between">
+                <CardTitle>Weekly Trend</CardTitle>
+                <TrendingUp className="w-5 h-5 text-yellow-600" />
+                </CardHeader>
+                <CardContent>
+                <p className="text-3xl font-bold text-yellow-600">{trendDifference}%</p>
+                <p className="text-sm text-gray-500 mt-1">Change from previous week</p>
+                </CardContent>
+            </Card>
+        </div>
+
+        {/* Charts & Absence Lists */}
+        <div className="grid lg:grid-cols-3 gap-4">
+            {/* Line Chart: Percentage Trend with Goal Line */}
+            <Card className="lg:col-span-2 shadow-md">
+            <CardHeader>
+              <CardTitle>Attendance Performance Over Time</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <LineChart data={attendanceData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="week" />
+                  <YAxis domain={[50, 100]} unit="%" /> {/* FIX: Start Y-axis at 50% */}
+                  <Tooltip formatter={(value, name) => [name === 'goal' ? `${value}% Target` : `${value}%`, name]} />
+                  
+                  {/* Goal Line */}
+                  <Line 
+                    type="monotone"
+                    dataKey="goal"
+                    stroke="#EF4444" // Red color
+                    strokeWidth={2}
+                    strokeDasharray="3 3" 
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                  {/* Actual Attendance Line */}
+                  <Line
+                    type="monotone"
+                    dataKey="attendance"
+                    stroke="#2563eb"
+                    strokeWidth={3}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+              <p className="text-sm text-gray-500 mt-2 text-center">Red line indicates the {ATTENDANCE_GOAL}% performance target.</p>
+            </CardContent>
+          </Card>
+
+          {/* Absence Lists (Actionable: Filtered by Section) */}
+          <Card className="shadow-md">
+            <CardHeader>
+              <CardTitle>3 Absences ({filters.section ? 'Filtered' : 'Select Section'})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {filters.section && absent3.length > 0 ? (
+                <ul className="space-y-2">
+                  {absent3.map((s) => (
+                    <li
+                      key={s.id}
+                      className="flex justify-between items-center bg-white/70 backdrop-blur-md p-2 rounded-xl border border-slate-200"
+                    >
+                      <div>
+                        <p className="font-medium">{s.name}</p>
+                        <p className="text-sm text-slate-500">
+                          {s.course} | Section: {s.section_id} {/* Display Section ID */}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => handleSendEmail(s)}
+                        className="flex items-center gap-1 bg-gradient-to-r from-teal-500 to-indigo-500 text-white rounded-lg px-3 py-1"
+                      >
+                        <Mail className="w-4 h-4" /> Notify
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
               ) : (
-                filteredCourses.map((c, i) => (
-                  <tr
-                    key={c.id}
-                    className="border-b border-slate-100 hover:bg-sky-50/60 transition text-sm"
-                  >
-                    <td className="px-3 py-2">{i + 1}</td>
-                    <td className="px-3 py-2 font-semibold">{c.code}</td>
-                    <td className="px-3 py-2">{c.name}</td>
-                    <td className="px-3 py-2 text-center">
-                      <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-medium">
-                        {c.credit_hour || "-"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-center">{c.semester || "-"}</td>
-                    <td className="px-3 py-2 text-center">{c.session || "-"}</td>
-                    <td className="px-3 py-2 text-center">
-                      <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-medium">
-                        {c.lecturers?.name || "-"}
-                      </span>
-                    </td>
-                    
-                    {/* NEW: Visibility Toggle Column */}
-                    <td className="px-3 py-2 text-center">
-                        <button
-                            onClick={() => handleToggleVisibility(c)}
-                            title={c.is_hidden_from_analysis ? "Click to Show" : "Click to Hide"}
-                            className={`px-2 py-0.5 rounded-full text-xs font-medium transition duration-200 ${
-                                c.is_hidden_from_analysis 
-                                    ? 'bg-rose-100 text-rose-700 hover:bg-rose-200' 
-                                    : 'bg-teal-100 text-teal-700 hover:bg-teal-200'
-                            }`}
-                        >
-                            {c.is_hidden_from_analysis ? 'Hidden 🙈' : 'Visible ✅'}
-                        </button>
-                    </td>
-
-                    <td className="px-3 py-2 text-center flex justify-center gap-1">
-                      <button
-                        onClick={() => startEdit(c)}
-                        className="px-2 py-1 rounded-lg text-white bg-gradient-to-r from-yellow-500 to-amber-500 hover:scale-[1.05] text-xs transition"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(c.id)}
-                        className="px-2 py-1 rounded-lg text-white bg-gradient-to-r from-red-500 to-pink-500 hover:scale-[1.05] text-xs transition"
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                <p className="text-gray-500">
+                  {filters.section ? `✅ No alerts for Section ${filters.section}` : 'Please select a section to view actionable alerts.'}
+                </p>
               )}
-            </tbody>
-          </table>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid lg:grid-cols-3 gap-4">
+          <Card className="shadow-md">
+            <CardHeader>
+              <CardTitle>6 Absences ({filters.section ? 'Filtered' : 'Select Section'})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {filters.section && absent6.length > 0 ? (
+                <ul className="space-y-2">
+                  {absent6.map((s) => (
+                    <li
+                      key={s.id}
+                      className="flex justify-between items-center bg-white/70 backdrop-blur-md p-2 rounded-xl border border-slate-200"
+                    >
+                      <div>
+                        <p className="font-medium">{s.name}</p>
+                        <p className="text-sm text-slate-500">
+                          {s.course} | Section: {s.section_id} {/* Display Section ID */}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => handleSendEmail(s)}
+                        className="flex items-center gap-1 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-lg px-3 py-1"
+                      >
+                        <Mail className="w-4 h-4" /> Warn
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-gray-500">
+                  {filters.section ? `✅ No alerts for Section ${filters.section}` : 'Please select a section to view actionable alerts.'}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+          
+          {/* New Bar Chart: Absence Status Comparison */}
+          <Card className="lg:col-span-2 shadow-md">
+            <CardHeader>
+              <CardTitle>Intervention Status</CardTitle>
+              <p className="text-xs text-gray-500">Students requiring 3+ or 6+ absence intervention.</p>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={absenceStatusData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis allowDecimals={false} label={{ value: 'Students', angle: -90, position: 'insideLeft' }} />
+                  <Tooltip 
+                    formatter={(value, name) => [value, name]} 
+                    cursor={{ fill: 'rgba(0, 0, 0, 0.05)' }} 
+                  />
+                  <Legend />
+                  
+                  {/* Bar for 3 Absences (Warning) */}
+                  <Bar dataKey="3+ Absences" fill="#facc15" name="3+ Absences (Warning)" radius={[6, 6, 0, 0]} />
+                  
+                  {/* Bar for 6 Absences (Barring) */}
+                  <Bar dataKey="6+ Absences" fill="#ef4444" name="6+ Absences (Barring)" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </DashboardLayout>
   );
 }
 
-// 🔑 Access Control: Restrict access to Admins only
-export default withRole(ManageCourse, ["admin"]);
+export default withRole(AttendanceDashboard, ["admin", "lecturer"]);
