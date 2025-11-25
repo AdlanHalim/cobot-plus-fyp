@@ -48,6 +48,7 @@ const Navbar = () => {
     { href: "/manage-course", label: "Manage Course", roles: ["admin"] },
     { href: "/analysis", label: "Analysis", roles: ["student", "lecturer", "admin"] },
     { href: "/manage-roles", label: "User Roles", roles: ["admin"] },
+    { href: "/student-view", label: "Student Records", roles: ["admin", "student"] },
   ];
 
   // --- FIX: Use the role text directly from the fetched profile ---
