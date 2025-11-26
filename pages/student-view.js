@@ -5,8 +5,10 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { motion } from "framer-motion";
 import { AlertTriangle, CheckCircle, Clock, Search, User, Mail } from 'lucide-react'; 
+import Calendar from 'react-calendar'; // 🚨 NEW IMPORT: Requires 'npm install react-calendar'
+import 'react-calendar/dist/Calendar.css'; // 🚨 NEW IMPORT: Import default calendar styles
 
-// ✅ INLINED TABLE COMPONENT DEFINITIONS START (To prevent module not found errors)
+// ✅ INLINED TABLE COMPONENT DEFINITIONS START 
 const Table = ({ children }) => (
   <div className="w-full">
     <table className="min-w-full divide-y divide-slate-200/80">{children}</table>
@@ -32,129 +34,110 @@ const TableCell = ({ children, className = "" }) => (
 // ✅ INLINED TABLE COMPONENT DEFINITIONS END
 
 
+// Supabase setup - Assuming environment variables are configured
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClientComponentClient({ supabaseUrl, supabaseKey: supabaseAnonKey });
+
+let supabase = null;
+if (supabaseUrl && supabaseAnonKey) {
+  supabase = createClientComponentClient({ supabaseUrl, supabaseKey: supabaseAnonKey });
+} else {
+  console.error("Supabase environment variables are missing. Data fetching will not work.");
+}
+
+
+// --- New Component: AttendanceCalendar ---
+/**
+ * Displays attendance status in a calendar view.
+ * Note: For simplicity, this currently aggregates all records onto the date,
+ * regardless of the specific course.
+ */
+const AttendanceCalendar = ({ attendanceRecords }) => {
+  // Creates a Map: { 'YYYY-MM-DD': ['status1', 'status2', ...] }
+  // Using an array allows handling multiple class sessions on the same day.
+  const attendanceMap = attendanceRecords.reduce((acc, record) => {
+    const date = new Date(record.class_sessions.class_date).toISOString().split('T')[0];
+    if (!acc.has(date)) {
+      acc.set(date, []);
+    }
+    acc.get(date).push(record.status);
+    return acc;
+  }, new Map());
+
+
+  // Function to apply custom class or content to a day tile
+  const tileClassName = ({ date, view }) => {
+    if (view === 'month') {
+      const dateString = date.toISOString().split('T')[0];
+      const statuses = attendanceMap.get(dateString);
+
+      if (statuses) {
+        // If all statuses are 'present', color green
+        if (statuses.every(s => s === 'present')) return 'calendar-present';
+        // If any status is 'absent', color red
+        if (statuses.includes('absent')) return 'calendar-absent';
+        // If any status is 'late', color amber
+        if (statuses.includes('late')) return 'calendar-late';
+      }
+    }
+    return null;
+  };
+  
+  return (
+    <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 shadow-inner">
+        <h4 className="text-base font-semibold text-slate-700 mb-4">Visual Attendance Calendar (Combined View)</h4>
+        <style jsx global>{`
+          /* Custom styles for the calendar view */
+          .react-calendar {
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            border: 1px solid #e2e8f0;
+          }
+          .react-calendar__tile {
+            position: relative;
+            padding: 10px 6px;
+          }
+          .calendar-present {
+            background-color: #d1fae5 !important; /* Tailwind emerald-100 */
+          }
+          .calendar-absent {
+            background-color: #fee2e2 !important; /* Tailwind rose-100 */
+          }
+          .calendar-late {
+            background-color: #fef3c7 !important; /* Tailwind amber-100 */
+          }
+          /* Add a small marker for multiple sessions */
+          .react-calendar__tile.calendar-present::after,
+          .react-calendar__tile.calendar-absent::after,
+          .react-calendar__tile.calendar-late::after {
+            content: '•';
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            font-size: 10px;
+            line-height: 1;
+            color: #475569; /* Slate-600 */
+            opacity: 0.8;
+          }
+        `}</style>
+        <Calendar 
+            tileClassName={tileClassName}
+            className="w-full border-none p-2"
+        />
+    </div>
+  );
+};
+// --- End of AttendanceCalendar Component ---
+
 
 function StudentView() {
   const [matricNo, setMatricNo] = useState("");
   const [studentData, setStudentData] = useState(null);
-  const [attendanceSummary, setAttendanceSummary] = useState([]); // Stores { sectionId, absenceCount, lecturerEmail }
+  const [allAttendanceRecords, setAllAttendanceRecords] = useState([]); 
+  const [totalAbsences, setTotalAbsences] = useState(0);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  const handleSearch = async (e) => {
-    e.preventDefault();
-    setMessage("");
-    setLoading(true);
-    setStudentData(null);
-    setAttendanceSummary([]);
-
-    if (!matricNo) {
-      setMessage("⚠️ Please enter your Matric No.");
-      setLoading(false);
-      return;
-    }
-
-    try {
-      // 1. Find Student ID and details
-      const { data: student, error: studentError } = await supabase
-        .from("students")
-        .select("id, name, nickname, matric_no, email") 
-        .eq("matric_no", matricNo)
-        .single();
-
-      if (studentError || !student) {
-        setMessage(`❌ Error: Student with Matric No. ${matricNo} not found.`);
-        setLoading(false);
-        return;
-      }
-      
-      setStudentData(student);
-      
-      // 2. Find all sections student is enrolled in
-      const { data: enrollments } = await supabase
-        .from("student_section_enrollments")
-        .select(`
-          section_id,
-          sections (
-            name, 
-            lecturer_id,
-            courses ( code, name ),
-            lecturers ( email ) // Join to get lecturer email for action button
-          )
-        `)
-        .eq("student_id", student.id);
-      
-      if (!enrollments || enrollments.length === 0) {
-        setMessage(`✅ Student found, but no active course enrollments.`);
-        setLoading(false);
-        return;
-      }
-
-      // 3. Fetch detailed attendance and calculate absence count for each section
-      const summaryPromises = enrollments.map(async (enrollment) => {
-        const section = enrollment.sections;
-        const sectionId = enrollment.section_id;
-        const lecturerEmail = section.lecturers?.email;
-
-        // Query all attendance records for this student and this section
-        const { data: records } = await supabase
-          .from("attendance_records")
-          .select(`
-            status,
-            timestamp,
-            class_sessions!inner(class_date)
-          `)
-          .eq("student_id", student.id)
-          .eq("class_sessions.section_id", sectionId) 
-          .order("class_sessions.class_date", { ascending: true });
-
-        const absenceCount = (records || []).filter(r => r.status === 'absent').length;
-
-        return {
-          sectionId,
-          courseCode: section.courses.code,
-          courseName: section.courses.name,
-          sectionName: section.name,
-          lecturerEmail,
-          absenceCount,
-          records: records || []
-        };
-      });
-
-      const summaryResults = await Promise.all(summaryPromises);
-      setAttendanceSummary(summaryResults);
-
-      setMessage(`✅ Attendance records loaded.`);
-
-    } catch (error) {
-      console.error("Student View Fetch Error:", error);
-      setMessage("❌ An unexpected internal error occurred while fetching data.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleEmailLecturer = (courseCode, lecturerEmail) => {
-    if (!lecturerEmail) {
-      alert(`Error: Lecturer email not found for ${courseCode}.`);
-      return;
-    }
-    
-    // Placeholder to open the user's default email client
-    const subject = `Excuse Letter for Absences in ${courseCode}`;
-    const body = `Dear Lecturer,
-
-Please find attached my excuse letter/documentation regarding my recent absences in your course (${courseCode}). 
-I would appreciate it if you could review this at your earliest convenience.
-
-Thank you,
-${studentData.name} (${studentData.matric_no})`;
-    
-    window.location.href = `mailto:${lecturerEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  };
-  
   const getStatusIcon = (status) => {
     switch (status) {
       case 'present': return <CheckCircle className="w-5 h-5 text-emerald-500" />;
@@ -164,9 +147,91 @@ ${studentData.name} (${studentData.matric_no})`;
     }
   };
 
+  /**
+   * Handles the search action: Fetches student details and ALL attendance records.
+   */
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    setMessage("");
+    setLoading(true);
+    setStudentData(null);
+    setAllAttendanceRecords([]);
+    setTotalAbsences(0);
+
+    if (!supabase) {
+      setMessage("❌ Database connection failed. Please check environment variables.");
+      setLoading(false);
+      return;
+    }
+
+    const trimmedMatricNo = matricNo.trim();
+    if (!trimmedMatricNo) {
+      setMessage("⚠️ Please enter your Matric No.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // 1. Find Student ID and details using matric_no
+      const { data: student, error: studentError } = await supabase
+        .from("students")
+        .select("id, name, nickname, matric_no, email") 
+        .eq("matric_no", trimmedMatricNo)
+        .single();
+
+      if (studentError || !student) {
+        if (studentError && studentError.code !== 'PGRST116') console.error("Student Fetch Error:", studentError);
+        setMessage(`❌ Error: Student with Matric No. ${trimmedMatricNo} not found.`);
+        setLoading(false);
+        return;
+      }
+      
+      setStudentData(student);
+      
+      // 2. Fetch ALL attendance records for the student.
+      const { data: records, error: recordsError } = await supabase
+        .from("attendance_records")
+        .select(`
+          status,
+          timestamp,
+          class_sessions!inner ( 
+            class_date,
+            sections (
+              name,
+              courses ( code, name )
+            )
+          )
+        `)
+        .eq("student_id", student.id)
+        .order("timestamp", { ascending: false }); 
+
+      if (recordsError) {
+        console.error("Attendance Records Fetch Error:", recordsError.message);
+        setMessage(`❌ An error occurred while fetching attendance records: ${recordsError.message || recordsError.code}`);
+        setLoading(false);
+        return;
+      }
+      
+      const recordsArray = records || [];
+      const calculatedAbsences = recordsArray.filter(r => r.status === 'absent').length;
+
+      setAllAttendanceRecords(recordsArray);
+      setTotalAbsences(calculatedAbsences);
+
+      setMessage(`✅ Found ${recordsArray.length} attendance records.`);
+
+    } catch (error) {
+      console.error("Student View Catch Error:", error);
+      setMessage("❌ An unexpected internal error occurred while fetching data.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  
   return (
     <DashboardLayout> 
-      <div className="flex flex-col items-center justify-start py-8">
+      <div className="flex flex-col items-center justify-start py-8 min-h-screen bg-slate-100">
         
         <motion.div
           className="w-full max-w-5xl bg-white/90 backdrop-blur-md border border-slate-200/50 rounded-3xl shadow-2xl p-8 space-y-8"
@@ -178,11 +243,11 @@ ${studentData.name} (${studentData.matric_no})`;
             <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-indigo-600 via-sky-600 to-teal-600 bg-clip-text text-transparent mb-2">
               Student Attendance Portal
             </h1>
-            <p className="text-slate-600 text-sm">Enter your matric number to view your records.</p>
+            <p className="text-slate-600 text-sm">Enter your matric number to view your complete attendance records.</p>
           </div>
 
           {/* Search Form */}
-          <form onSubmit={handleSearch} className="flex gap-3 p-4 bg-slate-100/50 rounded-xl shadow-inner border border-slate-200">
+          <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3 p-4 bg-slate-100/50 rounded-xl shadow-inner border border-slate-200">
             <input
               type="text"
               placeholder="Enter your Matric No. (e.g., A123456)"
@@ -194,95 +259,100 @@ ${studentData.name} (${studentData.matric_no})`;
             <button
               type="submit"
               disabled={loading}
-              className="px-6 py-2 flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-teal-400 hover:scale-[1.03] text-white font-medium rounded-xl shadow-md transition disabled:opacity-50"
+              className="px-6 py-2 flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-500 to-teal-400 hover:scale-[1.03] text-white font-medium rounded-xl shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Search className="w-5 h-5" />
-              {loading ? "Searching..." : "Search"}
+              {loading ? "Searching..." : "Search Records"}
             </button>
           </form>
 
-          {message && <p className={`text-center text-sm mt-4 ${message.includes('❌') ? 'text-rose-600 bg-rose-50 p-2 rounded-lg' : 'text-emerald-600'}`}>{message}</p>}
+          {message && <p className={`text-center text-sm mt-4 p-3 rounded-lg ${message.includes('❌') ? 'text-rose-700 bg-rose-100 border border-rose-300' : message.includes('⚠️') ? 'text-amber-700 bg-amber-100 border border-amber-300' : 'text-emerald-700 bg-emerald-100 border border-emerald-300'}`}>{message}</p>}
 
           {/* Results Display */}
           {studentData && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 pt-4">
-                  <div className="flex items-center gap-2 border-b pb-3 border-slate-200/80">
-                    <User className="w-6 h-6 text-indigo-500" />
-                    <h2 className="text-xl font-semibold text-slate-700">
-                      Welcome, {studentData.nickname || studentData.name} ({studentData.matric_no})
-                    </h2>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8 pt-4">
+                  {/* Student Header */}
+                  <div className="flex items-center gap-3 p-4 bg-indigo-50 rounded-xl shadow-md border-l-4 border-indigo-500">
+                    <User className="w-7 h-7 text-indigo-600" />
+                    <div>
+                        <h2 className="text-xl font-bold text-slate-800">
+                          {studentData.name}
+                        </h2>
+                        <p className="text-sm text-indigo-700 font-medium">
+                          Matric No: {studentData.matric_no} 
+                          {studentData.email && <span className="ml-4 flex items-center gap-1 text-slate-500"><Mail className="w-3 h-3"/>{studentData.email}</span>}
+                        </p>
+                    </div>
                   </div>
 
-                  {attendanceSummary.length > 0 ? (
-                      attendanceSummary.map((summary) => (
-                          <div key={summary.sectionId} className="bg-slate-50/90 p-5 rounded-xl shadow-lg border border-slate-200 space-y-4">
-                              <h3 className="text-lg font-bold text-sky-600">
-                                  {summary.courseCode}: {summary.courseName} — Section {summary.sectionName}
-                              </h3>
+                  {/* Overall Absence Summary */}
+                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-50 p-4 rounded-xl border border-slate-100 shadow-inner">
+                        <div className="flex items-center gap-4">
+                            <span className={`text-4xl font-extrabold ${totalAbsences >= 5 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                {totalAbsences}
+                            </span>
+                            <p className="text-base text-slate-700 font-medium">
+                                Total Absences (All Courses)
+                                <span className="block text-xs text-slate-500 font-normal">
+                                    This count combines records from all enrolled sections.
+                                </span>
+                            </p>
+                        </div>
+                   </div>
 
-                              {/* Absence Summary & Action */}
-                              <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow-inner border border-amber-100">
-                                  <div className="flex items-center gap-4">
-                                      <span className={`text-3xl font-extrabold ${summary.absenceCount >= 3 ? 'text-rose-600' : 'text-green-600'}`}>
-                                          {summary.absenceCount}
-                                      </span>
-                                      <p className="text-sm text-slate-600">
-                                          Total Absences Recorded
-                                      </p>
-                                  </div>
-                                  
-                                  {/* Action Button */}
-                                  <button
-                                      onClick={() => handleEmailLecturer(summary.courseCode, summary.lecturerEmail)}
-                                      className="px-4 py-2 flex items-center gap-2 rounded-xl text-white text-sm font-medium bg-gradient-to-r from-amber-500 to-yellow-600 hover:scale-[1.05] transition disabled:opacity-50"
-                                      disabled={!summary.lecturerEmail}
-                                      title={!summary.lecturerEmail ? 'Lecturer email not set' : 'Email your lecturer'}
-                                  >
-                                      <Mail className="w-4 h-4" />
-                                      Email Excuse
-                                  </button>
-                              </div>
+                  {/* Calendar View */}
+                  <AttendanceCalendar attendanceRecords={allAttendanceRecords} />
 
-                              {/* Detailed Attendance Table */}
-                              <h4 className="text-sm font-semibold text-slate-700 pt-2 border-t border-slate-100">Detailed Attendance Log:</h4>
-                              <div className="overflow-x-auto max-h-60">
-                                  <Table>
-                                      <TableHeader className="bg-slate-100/70 sticky top-0">
-                                          <TableRow>
-                                              <TableHead className="w-[150px]">Date</TableHead>
-                                              <TableHead>Time Recorded</TableHead>
-                                              <TableHead>Status</TableHead>
+                  {/* Detailed Attendance Table - Combined List */}
+                  <h4 className="text-base font-semibold text-slate-700 pt-2 border-t border-slate-100">Combined Session Breakdown (Table):</h4>
+                  <div className="overflow-x-auto max-h-96 border border-slate-200 rounded-xl shadow-inner">
+                      <Table>
+                          <TableHeader className="bg-slate-100 sticky top-0 shadow-sm z-10">
+                              <TableRow>
+                                  <TableHead className="w-[150px]">Date</TableHead>
+                                  <TableHead className="w-[150px]">Status</TableHead>
+                                  <TableHead>Course</TableHead>
+                                  <TableHead>Section</TableHead>
+                                  <TableHead>Time Recorded</TableHead>
+                              </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                              {allAttendanceRecords.length > 0 ? (
+                                  allAttendanceRecords.map((record, index) => {
+                                      // Safely access the deeply nested data
+                                      const session = record.class_sessions;
+                                      const section = session?.sections;
+                                      const course = section?.courses;
+
+                                      return (
+                                          <TableRow key={index} className="transition duration-100 ease-in-out">
+                                              <TableCell className="font-medium text-slate-700">
+                                                  {session?.class_date ? new Date(session.class_date).toLocaleDateString() : 'N/A'}
+                                              </TableCell>
+                                              <TableCell className="flex items-center gap-2 capitalize">
+                                                  {getStatusIcon(record.status)}
+                                                  <span className={`font-semibold ${record.status === 'absent' ? 'text-rose-600' : record.status === 'present' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                                    {record.status}
+                                                  </span>
+                                              </TableCell>
+                                              <TableCell className="text-sm text-slate-600">
+                                                <span className="font-bold">{course?.code || 'N/A'}</span> - {course?.name || 'N/A'}
+                                              </TableCell>
+                                              <TableCell className="text-sm text-slate-500">{section?.name || 'N/A'}</TableCell>
+                                              <TableCell className="text-sm text-slate-500">
+                                                  {record.timestamp ? new Date(record.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}
+                                              </TableCell>
                                           </TableRow>
-                                      </TableHeader>
-                                      <TableBody>
-                                          {summary.records.length > 0 ? (
-                                              summary.records.map((record, index) => (
-                                                  <TableRow key={index} className="hover:bg-slate-50/50">
-                                                      <TableCell className="font-medium">
-                                                          {new Date(record.class_sessions.class_date).toLocaleDateString()}
-                                                      </TableCell>
-                                                      <TableCell className="text-sm text-slate-500">
-                                                          {new Date(record.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                      </TableCell>
-                                                      <TableCell className="flex items-center gap-2 capitalize">
-                                                          {getStatusIcon(record.status)}
-                                                          <span className="font-semibold">{record.status}</span>
-                                                      </TableCell>
-                                                  </TableRow>
-                                              ))
-                                          ) : (
-                                              <TableRow>
-                                                  <TableCell colSpan={3} className="text-center text-slate-500 italic">No attendance records found.</TableCell>
-                                              </TableRow>
-                                          )}
-                                      </TableBody>
-                                  </Table>
-                              </div>
-                          </div>
-                      ))
-                  ) : (
-                      <p className="text-center text-slate-500 bg-amber-50 p-3 rounded-lg border border-amber-200">No attendance data or course enrollments found.</p>
-                  )}
+                                      );
+                                  })
+                              ) : (
+                                  <TableRow>
+                                      <TableCell colSpan={5} className="text-center text-slate-500 italic py-4">No attendance records found for this student.</TableCell>
+                                  </TableRow>
+                              )}
+                          </TableBody>
+                      </Table>
+                  </div>
               </motion.div>
           )}
         </motion.div>
