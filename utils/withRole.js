@@ -1,7 +1,7 @@
+// utils/withRole.js
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-// Using useUser instead of useSession for cleaner check of authenticated state
-import { useUser, useSupabaseClient } from '@supabase/auth-helpers-react'; 
+import { useUser, useSupabaseClient, useSessionContext } from '@supabase/auth-helpers-react'; // Import useSessionContext
 import { motion } from "framer-motion";
 
 // Simple Component to show while loading/redirecting
@@ -19,67 +19,73 @@ const LoadingSpinner = () => (
 export default function withRole(Component, allowedRoles = []) {
   return function RoleProtected(props) {
     const router = useRouter();
-    const user = useUser(); // Use user hook
+    const user = useUser();
     const supabase = useSupabaseClient();
+    // CRITICAL: Get the session status check
+    const { isLoading: isSupabaseLoading, session } = useSessionContext(); 
+    
     const [loading, setLoading] = useState(true);
     const [authorized, setAuthorized] = useState(false);
 
     useEffect(() => {
-      // 1. If user state hasn't resolved yet, wait.
-      if (user === undefined) return;
+      // 1. Wait for Supabase to finish checking the session cookie (isSupabaseLoading)
+      // This is the key difference from just checking 'user === undefined'.
+      if (isSupabaseLoading) return; 
 
-      // 2. Not logged in: Redirect to login
-      if (!user) {
+      // 2. Not Logged In (session is null after loading): Redirect to login immediately.
+      if (!session) {
         setLoading(false);
         router.replace("/login");
         return;
       }
 
-      // 3. If logged in, check the user's profile for the explicit 'role'
+      // 3. Logged In: Check the user's explicit role from the database.
       const checkProfile = async () => {
         try {
-          const { data: profile, error } = await supabase
+          const { data: profile } = await supabase
             .from("profiles")
-            .select("role") // IMPORTANT: Fetching the explicit 'role' string
+            .select("role")
             .eq("id", user.id)
             .single();
 
-          if (error || !profile?.role) {
-            console.error("Profile or Role check error:", error?.message || "Role not found.");
-            // If the profile or role is missing, treat as unauthorized
-            setLoading(false);
-            router.replace("/unauthorized"); 
-            return;
-          }
+          const userRole = profile?.role || 'student';
 
-          const userRole = profile.role; // e.g., 'admin', 'lecturer', or 'student'
-
-          // 4. Check if the user's role is in the list of allowed roles
+          // 4. Check Authorization
           if (allowedRoles.includes(userRole)) {
             setAuthorized(true);
           } else {
+            // Logged in, but unauthorized for this page
             router.replace("/unauthorized");
           }
           setLoading(false);
 
         } catch (err) {
-            console.error("Fatal error during role check:", err);
-            setLoading(false);
+            console.error("Error fetching role:", err);
             router.replace("/unauthorized");
+            setLoading(false);
         }
       };
 
-      checkProfile();
-    }, [user, router, allowedRoles, supabase]);
+      // Only run the DB check if the session is present (not null)
+      if (session) {
+        checkProfile();
+      }
 
-    if (loading) {
-      return <LoadingSpinner />; // Show the spinner while checking
+    }, [isSupabaseLoading, session, router, allowedRoles, supabase, user]);
+
+    // 5. Render Guards
+    // IMPORTANT: Check isSupabaseLoading to continue showing the spinner until the session check is finished.
+    if (isSupabaseLoading || loading) {
+      return <LoadingSpinner />; 
     }
 
     if (!authorized) {
-      return null; // Don't render the component while redirecting
+      // If we finished checking (loading is false) and are not authorized, 
+      // the router.replace() call handles redirecting, so we render nothing.
+      return null; 
     }
 
+    // Access granted
     return <Component {...props} />;
   };
 }
