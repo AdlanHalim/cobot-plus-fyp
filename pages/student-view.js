@@ -47,13 +47,9 @@ if (supabaseUrl && supabaseAnonKey) {
 
 
 // --- Component: AttendanceCalendar ---
-/**
- * Displays attendance status in a calendar view.
- */
 const AttendanceCalendar = ({ attendanceRecords }) => {
   // Creates a Map: { 'YYYY-MM-DD': [status1, status2, ...] }
   const attendanceMap = attendanceRecords.reduce((acc, record) => {
-    // Check for deeply nested data safety
     const classDate = record.class_sessions?.class_date;
     if (!classDate) return acc;
     
@@ -76,7 +72,6 @@ const AttendanceCalendar = ({ attendanceRecords }) => {
         // Priority: Absent > Late > Present
         if (statuses.includes('absent')) return 'calendar-absent';
         if (statuses.includes('late')) return 'calendar-late';
-        // If it ran any sessions and they were all marked, assume present if no issues found
         if (statuses.some(s => s === 'present')) return 'calendar-present';
       }
     }
@@ -109,7 +104,6 @@ const AttendanceCalendar = ({ attendanceRecords }) => {
           .calendar-late {
             background-color: #fef3c7 !important; /* amber-100 */
           }
-          /* Ensure text is readable on colored tiles */
           .react-calendar__tile.calendar-absent abbr, 
           .react-calendar__tile.calendar-late abbr, 
           .react-calendar__tile.calendar-present abbr {
@@ -133,7 +127,6 @@ function StudentView() {
   const [totalAbsences, setTotalAbsences] = useState(0);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  // NEW STATE: Control which view is active
   const [activeTab, setActiveTab] = useState('calendar'); 
 
   const getStatusIcon = (status) => {
@@ -155,7 +148,7 @@ function StudentView() {
     setStudentData(null);
     setAllAttendanceRecords([]);
     setTotalAbsences(0);
-    setActiveTab('calendar'); // Reset to calendar view on new search
+    setActiveTab('calendar'); 
 
     if (!supabase) {
       setMessage("❌ Database connection failed. Please check environment variables.");
@@ -270,34 +263,37 @@ function StudentView() {
           {/* Results Display */}
           {studentData && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8 pt-4">
-                  {/* Student Header */}
-                  <div className="flex items-center gap-3 p-4 bg-indigo-50 rounded-xl shadow-md border-l-4 border-indigo-500">
-                    <User className="w-7 h-7 text-indigo-600" />
-                    <div>
-                        <h2 className="text-xl font-bold text-slate-800">
-                          {studentData.name}
-                        </h2>
-                        <p className="text-sm text-indigo-700 font-medium">
-                          Matric No: {studentData.matric_no} 
-                          {studentData.email && <span className="ml-4 flex items-center gap-1 text-slate-500"><Mail className="w-3 h-3"/>{studentData.email}</span>}
-                        </p>
-                    </div>
-                  </div>
-
-                  {/* Overall Absence Summary */}
-                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 rounded-xl border border-slate-200 shadow-md bg-white">
-                        <div className="flex items-center gap-4">
-                            <span className={`text-4xl font-extrabold ${totalAbsences >= 5 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                {totalAbsences}
-                            </span>
-                            <p className="text-base text-slate-700 font-medium">
-                                Total Absences (All Courses)
-                                <span className="block text-xs text-slate-500 font-normal">
-                                    {totalAbsences >= 5 ? '⚠️ High risk of warning. Check your records immediately.' : 'Good attendance overall.'}
-                                </span>
+                  
+                  {/* Student Header with Combined Summary */}
+                  <div className="flex flex-col sm:flex-row items-start justify-between gap-4 p-4 bg-indigo-50 rounded-xl shadow-md border-l-4 border-indigo-500">
+                    <div className="flex items-start gap-3">
+                        <User className="w-7 h-7 text-indigo-600 flex-shrink-0" />
+                        <div>
+                            <h2 className="text-xl font-bold text-slate-800">
+                              {studentData.name}
+                            </h2>
+                            <p className="text-sm text-indigo-700 font-medium">
+                              Matric No: {studentData.matric_no} 
+                              {studentData.email && <span className="ml-4 flex items-center gap-1 text-slate-500"><Mail className="w-3 h-3"/>{studentData.email}</span>}
                             </p>
                         </div>
-                   </div>
+                    </div>
+
+                    {/* Total Absences & Warning (Moved here) */}
+                    <div className="flex flex-col items-end sm:items-center p-2 bg-white rounded-lg shadow-inner border border-slate-100">
+                        <div className="flex items-center gap-2">
+                            <span className={`text-2xl font-extrabold ${totalAbsences >= 5 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                {totalAbsences}
+                            </span>
+                            <p className="text-sm text-slate-700 font-medium whitespace-nowrap">
+                                Total Absences
+                            </p>
+                        </div>
+                        <span className={`text-xs mt-1 font-semibold ${totalAbsences >= 5 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                           {totalAbsences >= 5 ? '⚠️ High risk of warning.' : 'Attendance: Good.'}
+                        </span>
+                    </div>
+                  </div>
 
                   {/* Tab Navigation */}
                   <div className="flex border-b border-slate-200">
