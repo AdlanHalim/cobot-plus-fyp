@@ -4,9 +4,9 @@ import React, { useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout"; 
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { motion } from "framer-motion";
-import { AlertTriangle, CheckCircle, Clock, Search, User, Mail } from 'lucide-react'; 
-import Calendar from 'react-calendar'; // 🚨 NEW IMPORT: Requires 'npm install react-calendar'
-import 'react-calendar/dist/Calendar.css'; // 🚨 NEW IMPORT: Import default calendar styles
+import { AlertTriangle, CheckCircle, Clock, Search, User, Mail, Calendar as CalendarIcon, List } from 'lucide-react'; 
+import Calendar from 'react-calendar'; 
+import 'react-calendar/dist/Calendar.css'; 
 
 // ✅ INLINED TABLE COMPONENT DEFINITIONS START 
 const Table = ({ children }) => (
@@ -46,17 +46,18 @@ if (supabaseUrl && supabaseAnonKey) {
 }
 
 
-// --- New Component: AttendanceCalendar ---
+// --- Component: AttendanceCalendar ---
 /**
  * Displays attendance status in a calendar view.
- * Note: For simplicity, this currently aggregates all records onto the date,
- * regardless of the specific course.
  */
 const AttendanceCalendar = ({ attendanceRecords }) => {
-  // Creates a Map: { 'YYYY-MM-DD': ['status1', 'status2', ...] }
-  // Using an array allows handling multiple class sessions on the same day.
+  // Creates a Map: { 'YYYY-MM-DD': [status1, status2, ...] }
   const attendanceMap = attendanceRecords.reduce((acc, record) => {
-    const date = new Date(record.class_sessions.class_date).toISOString().split('T')[0];
+    // Check for deeply nested data safety
+    const classDate = record.class_sessions?.class_date;
+    if (!classDate) return acc;
+    
+    const date = new Date(classDate).toISOString().split('T')[0];
     if (!acc.has(date)) {
       acc.set(date, []);
     }
@@ -65,19 +66,18 @@ const AttendanceCalendar = ({ attendanceRecords }) => {
   }, new Map());
 
 
-  // Function to apply custom class or content to a day tile
+  // Function to apply custom class to a day tile
   const tileClassName = ({ date, view }) => {
     if (view === 'month') {
       const dateString = date.toISOString().split('T')[0];
       const statuses = attendanceMap.get(dateString);
 
-      if (statuses) {
-        // If all statuses are 'present', color green
-        if (statuses.every(s => s === 'present')) return 'calendar-present';
-        // If any status is 'absent', color red
+      if (statuses && statuses.length > 0) {
+        // Priority: Absent > Late > Present
         if (statuses.includes('absent')) return 'calendar-absent';
-        // If any status is 'late', color amber
         if (statuses.includes('late')) return 'calendar-late';
+        // If it ran any sessions and they were all marked, assume present if no issues found
+        if (statuses.some(s => s === 'present')) return 'calendar-present';
       }
     }
     return null;
@@ -85,12 +85,15 @@ const AttendanceCalendar = ({ attendanceRecords }) => {
   
   return (
     <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 shadow-inner">
-        <h4 className="text-base font-semibold text-slate-700 mb-4">Visual Attendance Calendar (Combined View)</h4>
+        <h4 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+            <CalendarIcon className="w-4 h-4"/>
+            Attendance Overview by Date (Highest priority status shown)
+        </h4>
         <style jsx global>{`
           /* Custom styles for the calendar view */
           .react-calendar {
             border-radius: 12px;
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
             border: 1px solid #e2e8f0;
           }
           .react-calendar__tile {
@@ -98,26 +101,19 @@ const AttendanceCalendar = ({ attendanceRecords }) => {
             padding: 10px 6px;
           }
           .calendar-present {
-            background-color: #d1fae5 !important; /* Tailwind emerald-100 */
+            background-color: #d1fae5 !important; /* emerald-100 */
           }
           .calendar-absent {
-            background-color: #fee2e2 !important; /* Tailwind rose-100 */
+            background-color: #fee2e2 !important; /* rose-100 */
           }
           .calendar-late {
-            background-color: #fef3c7 !important; /* Tailwind amber-100 */
+            background-color: #fef3c7 !important; /* amber-100 */
           }
-          /* Add a small marker for multiple sessions */
-          .react-calendar__tile.calendar-present::after,
-          .react-calendar__tile.calendar-absent::after,
-          .react-calendar__tile.calendar-late::after {
-            content: '•';
-            position: absolute;
-            top: 2px;
-            right: 2px;
-            font-size: 10px;
-            line-height: 1;
-            color: #475569; /* Slate-600 */
-            opacity: 0.8;
+          /* Ensure text is readable on colored tiles */
+          .react-calendar__tile.calendar-absent abbr, 
+          .react-calendar__tile.calendar-late abbr, 
+          .react-calendar__tile.calendar-present abbr {
+            font-weight: 700;
           }
         `}</style>
         <Calendar 
@@ -137,6 +133,8 @@ function StudentView() {
   const [totalAbsences, setTotalAbsences] = useState(0);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  // NEW STATE: Control which view is active
+  const [activeTab, setActiveTab] = useState('calendar'); 
 
   const getStatusIcon = (status) => {
     switch (status) {
@@ -157,6 +155,7 @@ function StudentView() {
     setStudentData(null);
     setAllAttendanceRecords([]);
     setTotalAbsences(0);
+    setActiveTab('calendar'); // Reset to calendar view on new search
 
     if (!supabase) {
       setMessage("❌ Database connection failed. Please check environment variables.");
@@ -286,7 +285,7 @@ function StudentView() {
                   </div>
 
                   {/* Overall Absence Summary */}
-                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-50 p-4 rounded-xl border border-slate-100 shadow-inner">
+                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 rounded-xl border border-slate-200 shadow-md bg-white">
                         <div className="flex items-center gap-4">
                             <span className={`text-4xl font-extrabold ${totalAbsences >= 5 ? 'text-rose-600' : 'text-emerald-600'}`}>
                                 {totalAbsences}
@@ -294,64 +293,83 @@ function StudentView() {
                             <p className="text-base text-slate-700 font-medium">
                                 Total Absences (All Courses)
                                 <span className="block text-xs text-slate-500 font-normal">
-                                    This count combines records from all enrolled sections.
+                                    {totalAbsences >= 5 ? '⚠️ High risk of warning. Check your records immediately.' : 'Good attendance overall.'}
                                 </span>
                             </p>
                         </div>
                    </div>
 
-                  {/* Calendar View */}
-                  <AttendanceCalendar attendanceRecords={allAttendanceRecords} />
+                  {/* Tab Navigation */}
+                  <div className="flex border-b border-slate-200">
+                    <button
+                      onClick={() => setActiveTab('calendar')}
+                      className={`px-6 py-3 text-sm font-medium transition duration-200 flex items-center gap-2 ${activeTab === 'calendar' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                      <CalendarIcon className="w-4 h-4" />
+                      Calendar View
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('table')}
+                      className={`px-6 py-3 text-sm font-medium transition duration-200 flex items-center gap-2 ${activeTab === 'table' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                      <List className="w-4 h-4" />
+                      Detailed Log Table ({allAttendanceRecords.length})
+                    </button>
+                  </div>
+                  
+                  {/* Tab Content */}
+                  <div className="pt-4">
+                      {activeTab === 'calendar' && <AttendanceCalendar attendanceRecords={allAttendanceRecords} />}
+                      
+                      {activeTab === 'table' && (
+                          <div className="overflow-x-auto max-h-96 border border-slate-200 rounded-xl shadow-inner">
+                              <Table>
+                                  <TableHeader className="bg-slate-100 sticky top-0 shadow-sm z-10">
+                                      <TableRow>
+                                          <TableHead className="w-[150px]">Date</TableHead>
+                                          <TableHead className="w-[150px]">Status</TableHead>
+                                          <TableHead>Course</TableHead>
+                                          <TableHead>Section</TableHead>
+                                          <TableHead>Time Recorded</TableHead>
+                                      </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                      {allAttendanceRecords.length > 0 ? (
+                                          allAttendanceRecords.map((record, index) => {
+                                              const session = record.class_sessions;
+                                              const section = session?.sections;
+                                              const course = section?.courses;
 
-                  {/* Detailed Attendance Table - Combined List */}
-                  <h4 className="text-base font-semibold text-slate-700 pt-2 border-t border-slate-100">Combined Session Breakdown (Table):</h4>
-                  <div className="overflow-x-auto max-h-96 border border-slate-200 rounded-xl shadow-inner">
-                      <Table>
-                          <TableHeader className="bg-slate-100 sticky top-0 shadow-sm z-10">
-                              <TableRow>
-                                  <TableHead className="w-[150px]">Date</TableHead>
-                                  <TableHead className="w-[150px]">Status</TableHead>
-                                  <TableHead>Course</TableHead>
-                                  <TableHead>Section</TableHead>
-                                  <TableHead>Time Recorded</TableHead>
-                              </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                              {allAttendanceRecords.length > 0 ? (
-                                  allAttendanceRecords.map((record, index) => {
-                                      // Safely access the deeply nested data
-                                      const session = record.class_sessions;
-                                      const section = session?.sections;
-                                      const course = section?.courses;
-
-                                      return (
-                                          <TableRow key={index} className="transition duration-100 ease-in-out">
-                                              <TableCell className="font-medium text-slate-700">
-                                                  {session?.class_date ? new Date(session.class_date).toLocaleDateString() : 'N/A'}
-                                              </TableCell>
-                                              <TableCell className="flex items-center gap-2 capitalize">
-                                                  {getStatusIcon(record.status)}
-                                                  <span className={`font-semibold ${record.status === 'absent' ? 'text-rose-600' : record.status === 'present' ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                                    {record.status}
-                                                  </span>
-                                              </TableCell>
-                                              <TableCell className="text-sm text-slate-600">
-                                                <span className="font-bold">{course?.code || 'N/A'}</span> - {course?.name || 'N/A'}
-                                              </TableCell>
-                                              <TableCell className="text-sm text-slate-500">{section?.name || 'N/A'}</TableCell>
-                                              <TableCell className="text-sm text-slate-500">
-                                                  {record.timestamp ? new Date(record.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}
-                                              </TableCell>
+                                              return (
+                                                  <TableRow key={index} className="transition duration-100 ease-in-out">
+                                                      <TableCell className="font-medium text-slate-700">
+                                                          {session?.class_date ? new Date(session.class_date).toLocaleDateString() : 'N/A'}
+                                                      </TableCell>
+                                                      <TableCell className="flex items-center gap-2 capitalize">
+                                                          {getStatusIcon(record.status)}
+                                                          <span className={`font-semibold ${record.status === 'absent' ? 'text-rose-600' : record.status === 'present' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                                            {record.status}
+                                                          </span>
+                                                      </TableCell>
+                                                      <TableCell className="text-sm text-slate-600">
+                                                        <span className="font-bold">{course?.code || 'N/A'}</span> - {course?.name || 'N/A'}
+                                                      </TableCell>
+                                                      <TableCell className="text-sm text-slate-500">{section?.name || 'N/A'}</TableCell>
+                                                      <TableCell className="text-sm text-slate-500">
+                                                          {record.timestamp ? new Date(record.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}
+                                                      </TableCell>
+                                                  </TableRow>
+                                              );
+                                          })
+                                      ) : (
+                                          <TableRow>
+                                              <TableCell colSpan={5} className="text-center text-slate-500 italic py-4">No attendance records found for this student.</TableCell>
                                           </TableRow>
-                                      );
-                                  })
-                              ) : (
-                                  <TableRow>
-                                      <TableCell colSpan={5} className="text-center text-slate-500 italic py-4">No attendance records found for this student.</TableCell>
-                                  </TableRow>
-                              )}
-                          </TableBody>
-                      </Table>
+                                      )}
+                                  </TableBody>
+                              </Table>
+                          </div>
+                      )}
                   </div>
               </motion.div>
           )}
