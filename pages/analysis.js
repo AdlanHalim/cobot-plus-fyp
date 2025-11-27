@@ -316,18 +316,24 @@ function AttendanceDashboard() {
     const actionMessage = absenceCount === 3 ? 'Warning Letter Sent' : 'Exam Barring Letter Sent';
     
     // 1. Invoke the secure Supabase Edge Function
+    const subject = actionType === 'warning'
+      ? 'Attendance Warning Notice'
+      : 'Barring Notice – Excessive Absences';
+
+    const bodyText = actionType === 'warning'
+      ? `Dear ${student.name},\n\nYou have been absent 3 times in ${student.course}.\nPlease take this as an official warning.\n\nRegards,\nAcademic Affairs Office`
+      : `Dear ${student.name},\n\nYou have been absent 6 times in ${student.course}.\nAs per attendance policy, you are hereby barred from final examinations.\n\nPlease contact your course lecturer immediately.\n\nRegards,\nAcademic Affairs Office`;
+
     const { data: edgeFunctionResponse, error: invokeError } = await supabase.functions.invoke(
-        'send-intervention-email', // The name of your deployed Edge Function
-        {
-            method: 'POST',
-            body: {
-                student_id: student.id,
-                section_id: student.section_id,
-                email_type: actionType, // 'warning' or 'barring'
-                student_email: student.email, // Passed to Edge function
-                course_code: student.course
-            }
+      'send-email', // The name of your deployed Edge Function
+      {
+        method: 'POST',
+        body: {
+          to: student.email,
+          subject,
+          body: bodyText,
         }
+      }
     );
 
     if (invokeError) {

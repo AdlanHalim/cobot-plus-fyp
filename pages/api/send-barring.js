@@ -22,11 +22,14 @@ export default async function handler(req, res) {
     for (const s of students) {
       await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_FUNCTION_URL}/send-email`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        },
         body: JSON.stringify({
           to: s.students.email,
           subject: "Barring Notice – Excessive Absences",
-          text: `Dear ${s.students.name},
+          body: `Dear ${s.students.name},
 
 You have been absent 6 times in ${s.courses.name}.
 As per attendance policy, you are hereby barred from final examinations.

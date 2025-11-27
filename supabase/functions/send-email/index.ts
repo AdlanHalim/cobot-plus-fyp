@@ -5,10 +5,13 @@ import { SmtpClient } from "https://deno.land/x/smtp/mod.ts";
 
 serve(async (req) => {
   try {
-    const { to, subject, body } = await req.json();
+    const { to, subject, body, text } = await req.json();
 
-    if (!to || !subject || !body) {
-      return new Response(JSON.stringify({ error: "Missing required fields" }), {
+    // Accept either `body` or `text` from callers for convenience
+    const contentBody = body ?? text;
+
+    if (!to || !subject || !contentBody) {
+      return new Response(JSON.stringify({ error: "Missing required fields: to, subject, body/text" }), {
         status: 400,
       });
     }
@@ -36,7 +39,7 @@ serve(async (req) => {
       from: EMAIL_USER,
       to,
       subject,
-      content: body,
+      content: contentBody,
     });
 
     await client.close();
