@@ -1,3 +1,7 @@
 {
-  "imports": {}
+  "imports": {
+    "https://deno.land/std@0.177.0/": "https://deno.land/std@0.177.0/",
+    "smtp": "https://deno.land/x/smtp@v0.7.0/mod.ts",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2" 
+  }
 }
