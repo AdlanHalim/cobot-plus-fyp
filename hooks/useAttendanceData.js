@@ -5,6 +5,7 @@ const ATTENDANCE_GOAL = 80;
 
 /**
  * Custom hook for fetching and managing attendance analysis data.
+ * Includes late tracking and punctuality metrics.
  * 
  * @param {Object} params
  * @param {Object} params.filters - { section: string, period: string }
@@ -15,8 +16,11 @@ const ATTENDANCE_GOAL = 80;
  *   attendanceData: Array,
  *   sections: Array,
  *   averageAttendance: number,
+ *   punctualityScore: number,
  *   totalStudents: number,
  *   trendDifference: number,
+ *   statusBreakdown: { present: number, late: number, absent: number },
+ *   chronicLate: Array,
  *   absent3: Array,
  *   absent6: Array,
  *   absenceStatusData: Array,
@@ -31,8 +35,11 @@ export function useAttendanceData({ filters, lecturerId, userRole }) {
     const [attendanceData, setAttendanceData] = useState([]);
     const [sections, setSections] = useState([]);
     const [averageAttendance, setAverageAttendance] = useState(0);
+    const [punctualityScore, setPunctualityScore] = useState(0);
     const [totalStudents, setTotalStudents] = useState(0);
     const [trendDifference, setTrendDifference] = useState(0);
+    const [statusBreakdown, setStatusBreakdown] = useState({ present: 0, late: 0, absent: 0 });
+    const [chronicLate, setChronicLate] = useState([]);
     const [absent3, setAbsent3] = useState([]);
     const [absent6, setAbsent6] = useState([]);
     const [absenceStatusData, setAbsenceStatusData] = useState([]);
@@ -43,8 +50,11 @@ export function useAttendanceData({ filters, lecturerId, userRole }) {
         setAttendanceData([]);
         setSections([]);
         setAverageAttendance(0);
+        setPunctualityScore(0);
         setTotalStudents(0);
         setTrendDifference(0);
+        setStatusBreakdown({ present: 0, late: 0, absent: 0 });
+        setChronicLate([]);
         setAbsent3([]);
         setAbsent6([]);
         setAbsenceStatusData([]);
@@ -120,36 +130,60 @@ export function useAttendanceData({ filters, lecturerId, userRole }) {
             const { data: trend, error: trendError } = await attendanceQuery;
             if (trendError) throw trendError;
 
-            // Transform trend data
+            // Transform trend data - include late in attendance count
             const grouped = {};
+            let presentCount = 0;
+            let lateCount = 0;
+            let absentCount = 0;
+
             trend?.forEach((r) => {
                 const date = new Date(r.class_sessions.class_date);
                 const weekIndex = Math.ceil(date.getDate() / 7);
                 const weekLabel = `Wk ${weekIndex}`;
 
                 if (!grouped[weekIndex]) {
-                    grouped[weekIndex] = { weekIndex, week: weekLabel, total: 0, present: 0 };
+                    grouped[weekIndex] = { weekIndex, week: weekLabel, total: 0, attended: 0, present: 0, late: 0 };
                 }
                 grouped[weekIndex].total += 1;
-                if (r.status === "present") grouped[weekIndex].present += 1;
+
+                if (r.status === "present") {
+                    grouped[weekIndex].present += 1;
+                    grouped[weekIndex].attended += 1;
+                    presentCount++;
+                } else if (r.status === "late") {
+                    grouped[weekIndex].late += 1;
+                    grouped[weekIndex].attended += 1;  // Late still counts as attended
+                    lateCount++;
+                } else {
+                    absentCount++;
+                }
             });
 
             const formattedTrend = Object.values(grouped)
                 .map((w) => ({
                     week: w.week,
                     weekIndex: w.weekIndex,
-                    attendance: Math.round((w.present / w.total) * 100),
+                    attendance: w.total > 0 ? Math.round((w.attended / w.total) * 100) : 0,
+                    present: w.present,
+                    late: w.late,
                     goal: ATTENDANCE_GOAL,
                 }))
                 .sort((a, b) => a.weekIndex - b.weekIndex);
 
             setAttendanceData(formattedTrend);
 
-            // Summary Calculations
+            // Status Breakdown
+            setStatusBreakdown({ present: presentCount, late: lateCount, absent: absentCount });
+
+            // Summary Calculations - attendance includes both present and late
             const totalRecords = trend?.length || 0;
-            const presentRecords = trend?.filter((r) => r.status === "present").length || 0;
-            const overallAverage = totalRecords > 0 ? Math.round((presentRecords / totalRecords) * 100) : 0;
+            const attendedRecords = presentCount + lateCount;
+            const overallAverage = totalRecords > 0 ? Math.round((attendedRecords / totalRecords) * 100) : 0;
             setAverageAttendance(overallAverage);
+
+            // Punctuality Score - % of attended students who were on-time (not late)
+            const punctuality = attendedRecords > 0 ? Math.round((presentCount / attendedRecords) * 100) : 100;
+            setPunctualityScore(punctuality);
 
             // Total Students
             let studentQuery = supabase
@@ -209,6 +243,44 @@ export function useAttendanceData({ filters, lecturerId, userRole }) {
                 absent3List = mapAbsences(safeAllAbsencesData, 3);
                 absent6List = mapAbsences(safeAllAbsencesData, 6);
 
+                // --- D. Chronic Late Arrivers (3+ late) ---
+                const { data: lateData, error: lateError } = await supabase
+                    .from("attendance_records")
+                    .select(`
+                        student_id,
+                        status,
+                        student:student_id(id, name, nickname, email),
+                        class_sessions!inner(section_id)
+                    `)
+                    .eq("class_sessions.section_id", targetSectionId)
+                    .eq("status", "late");
+
+                if (lateError) {
+                    console.error("Late Data Fetch Error:", lateError);
+                }
+
+                // Count late occurrences per student
+                const lateCountMap = {};
+                (lateData || []).forEach((rec) => {
+                    const sid = rec.student_id;
+                    if (!lateCountMap[sid]) {
+                        lateCountMap[sid] = {
+                            id: sid,
+                            name: rec.student?.nickname || rec.student?.name || "Unknown",
+                            email: rec.student?.email || "",
+                            count: 0,
+                        };
+                    }
+                    lateCountMap[sid].count++;
+                });
+
+                // Filter to 3+ late
+                const chronicLateList = Object.values(lateCountMap)
+                    .filter((s) => s.count >= 3)
+                    .sort((a, b) => b.count - a.count);
+
+                setChronicLate(chronicLateList);
+
                 setAbsenceStatusData([
                     {
                         name: "Intervention Required",
@@ -240,8 +312,11 @@ export function useAttendanceData({ filters, lecturerId, userRole }) {
         attendanceData,
         sections,
         averageAttendance,
+        punctualityScore,
         totalStudents,
         trendDifference,
+        statusBreakdown,
+        chronicLate,
         absent3,
         absent6,
         absenceStatusData,

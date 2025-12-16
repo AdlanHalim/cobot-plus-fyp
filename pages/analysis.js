@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Download, Mail, Users, BarChart2, TrendingUp, AlertTriangle, XCircle, CheckCircle } from "lucide-react";
+import { Download, Mail, Users, BarChart2, TrendingUp, AlertTriangle, XCircle, CheckCircle, Clock } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -16,6 +16,9 @@ import {
   BarChart,
   Bar,
   Legend,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts";
 import { useSupabaseClient } from "@supabase/auth-helpers-react";
 import withRole from "../utils/withRole";
@@ -39,8 +42,11 @@ function AttendanceDashboard() {
     attendanceData,
     sections,
     averageAttendance,
+    punctualityScore,
     totalStudents,
     trendDifference,
+    statusBreakdown,
+    chronicLate,
     absent3,
     absent6,
     absenceStatusData,
@@ -235,7 +241,7 @@ function AttendanceDashboard() {
         </div>
 
         {/* KPI Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="bg-white shadow-sm border border-slate-100">
             <CardContent className="p-6 flex items-start justify-between">
               <div>
@@ -247,6 +253,21 @@ function AttendanceDashboard() {
               </div>
               <div className="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center">
                 <BarChart2 className="w-5 h-5 text-teal-600" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white shadow-sm border border-slate-100">
+            <CardContent className="p-6 flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-500 mb-1">Punctuality Score</p>
+                <h3 className={`text-3xl font-bold ${punctualityScore >= 80 ? "text-emerald-600" : punctualityScore >= 60 ? "text-amber-600" : "text-rose-600"}`}>
+                  {punctualityScore}%
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">On-time arrivals</p>
+              </div>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${punctualityScore >= 80 ? "bg-emerald-50" : punctualityScore >= 60 ? "bg-amber-50" : "bg-rose-50"}`}>
+                <Clock className={`w-5 h-5 ${punctualityScore >= 80 ? "text-emerald-600" : punctualityScore >= 60 ? "text-amber-600" : "text-rose-600"}`} />
               </div>
             </CardContent>
           </Card>
@@ -454,6 +475,101 @@ function AttendanceDashboard() {
                 <div className="flex flex-col items-center justify-center h-40 text-slate-400">
                   <CheckCircle className="w-8 h-8 mb-2 opacity-20" />
                   <p className="text-sm">No barring actions pending</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Status Breakdown & Chronic Late */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+          {/* Status Breakdown Pie Chart */}
+          <Card className="bg-white shadow-sm border border-slate-100">
+            <CardHeader className="pb-2 border-b border-slate-50">
+              <CardTitle className="text-base font-semibold text-slate-800">Attendance Breakdown</CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="h-[250px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: "On Time", value: statusBreakdown.present, color: CHART_COLORS.emerald },
+                        { name: "Late", value: statusBreakdown.late, color: CHART_COLORS.amber },
+                        { name: "Absent", value: statusBreakdown.absent, color: CHART_COLORS.rose },
+                      ].filter(d => d.value > 0)}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={80}
+                      paddingAngle={2}
+                      dataKey="value"
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {[
+                        { name: "On Time", value: statusBreakdown.present, color: CHART_COLORS.emerald },
+                        { name: "Late", value: statusBreakdown.late, color: CHART_COLORS.amber },
+                        { name: "Absent", value: statusBreakdown.absent, color: CHART_COLORS.rose },
+                      ].filter(d => d.value > 0).map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="grid grid-cols-3 gap-2 mt-4 text-center">
+                <div className="bg-emerald-50 rounded-lg p-2">
+                  <p className="text-lg font-bold text-emerald-600">{statusBreakdown.present}</p>
+                  <p className="text-xs text-slate-500">On Time</p>
+                </div>
+                <div className="bg-amber-50 rounded-lg p-2">
+                  <p className="text-lg font-bold text-amber-600">{statusBreakdown.late}</p>
+                  <p className="text-xs text-slate-500">Late</p>
+                </div>
+                <div className="bg-rose-50 rounded-lg p-2">
+                  <p className="text-lg font-bold text-rose-600">{statusBreakdown.absent}</p>
+                  <p className="text-xs text-slate-500">Absent</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Chronic Late Arrivers */}
+          <Card className="bg-white shadow-sm border border-slate-100 flex flex-col h-full">
+            <CardHeader className="pb-3 border-b border-slate-50 bg-orange-50/50 rounded-t-2xl">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-orange-500" />
+                <CardTitle className="text-base font-semibold text-slate-800">
+                  Chronic Late Arrivers (3+ times)
+                </CardTitle>
+                <span className="ml-auto bg-orange-100 text-orange-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                  {chronicLate.length}
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0 flex-1">
+              {chronicLate.length > 0 ? (
+                <div className="divide-y divide-slate-50 max-h-[300px] overflow-y-auto">
+                  {chronicLate.map((s) => (
+                    <div key={s.id} className="p-4 hover:bg-slate-50 transition flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-slate-800 text-sm">{s.name}</p>
+                        <p className="text-xs text-slate-500">{s.email}</p>
+                      </div>
+                      <span className="bg-orange-100 text-orange-700 text-xs font-bold px-2.5 py-1 rounded-full">
+                        {s.count} times late
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-40 text-slate-400">
+                  <CheckCircle className="w-8 h-8 mb-2 opacity-20" />
+                  <p className="text-sm">No chronic late arrivers</p>
+                  <p className="text-xs mt-1">Select a section to view data</p>
                 </div>
               )}
             </CardContent>

@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useRef } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import withRole from "../utils/withRole";
-import { useDashboardData, useClassSession } from "@/hooks";
+import { useDashboardData, useClassSession, useUserRole } from "@/hooks";
 import { useSupabaseClient } from "@supabase/auth-helpers-react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -27,17 +27,19 @@ function Home() {
   const prevAttendanceRef = useRef([]);
 
   // Use custom hooks
+  const { userRole, lecturerId } = useUserRole();
   const { attendanceList, lastUpdate, isBackendOnline, refetch } = useDashboardData(API_BASE);
   const {
     sections,
     activeSession,
     selectedSectionId,
     setSelectedSectionId,
+    suggestedSectionIds,
     startClass,
     endClass,
     error: sessionError,
     isLoading: sessionLoading
-  } = useClassSession();
+  } = useClassSession({ lecturerId, userRole });
 
   // Toast notification when new student detected
   useEffect(() => {
@@ -252,7 +254,7 @@ function Home() {
                 <option value="">Select Section...</option>
                 {sections.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.courses?.code} - {s.name}
+                    {s.courses?.code} - {s.name}{suggestedSectionIds?.includes(s.id) ? " ⏰ (Now)" : ""}
                   </option>
                 ))}
               </select>

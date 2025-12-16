@@ -3,6 +3,11 @@ import { useSupabaseClient } from "@supabase/auth-helpers-react";
 
 /**
  * Custom hook for managing class sessions (Start/End class functionality).
+ * Now supports lecturer filtering and schedule-based auto-suggest.
+ * 
+ * @param {Object} options
+ * @param {string|null|false} options.lecturerId - Lecturer UUID for filtering (false = admin, no filter)
+ * @param {string|null} options.userRole - Current user's role
  * 
  * @returns {{
  *   sections: Array,
@@ -10,41 +15,50 @@ import { useSupabaseClient } from "@supabase/auth-helpers-react";
  *   isLoading: boolean,
  *   selectedSectionId: string,
  *   setSelectedSectionId: Function,
+ *   suggestedSectionIds: Array,
  *   startClass: Function,
  *   endClass: Function,
  *   error: string | null
  * }}
  */
-export function useClassSession() {
+export function useClassSession({ lecturerId, userRole } = {}) {
     const supabase = useSupabaseClient();
 
     const [sections, setSections] = useState([]);
     const [activeSession, setActiveSession] = useState(null);
     const [selectedSectionId, setSelectedSectionId] = useState("");
+    const [suggestedSectionIds, setSuggestedSectionIds] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    // Fetch available sections for the current user
+    // Fetch available sections for the current user (filtered by lecturer if applicable)
     const fetchSections = useCallback(async () => {
         if (!supabase) return;
 
         try {
-            const { data, error: fetchError } = await supabase
+            let query = supabase
                 .from("sections")
                 .select(`
-          id,
-          name,
-          courses (code, name)
-        `)
+                    id,
+                    name,
+                    lecturer_id,
+                    courses (code, name)
+                `)
                 .order("name");
 
+            // Filter by lecturer if user is a lecturer (not admin)
+            if (userRole === "lecturer" && lecturerId) {
+                query = query.eq("lecturer_id", lecturerId);
+            }
+
+            const { data, error: fetchError } = await query;
             if (fetchError) throw fetchError;
             setSections(data || []);
         } catch (err) {
             console.error("Error fetching sections:", err);
             setError(err.message);
         }
-    }, [supabase]);
+    }, [supabase, lecturerId, userRole]);
 
     // Check for any active (non-ended) session
     const checkActiveSession = useCallback(async () => {
@@ -56,17 +70,17 @@ export function useClassSession() {
             const { data, error: fetchError } = await supabase
                 .from("class_sessions")
                 .select(`
-          id,
-          section_id,
-          class_date,
-          start_time,
-          ended_at,
-          status,
-          sections (
-            name,
-            courses (code, name)
-          )
-        `)
+                    id,
+                    section_id,
+                    class_date,
+                    start_time,
+                    ended_at,
+                    status,
+                    sections (
+                        name,
+                        courses (code, name)
+                    )
+                `)
                 .eq("class_date", today)
                 .is("ended_at", null)
                 .limit(1)
@@ -90,10 +104,57 @@ export function useClassSession() {
         }
     }, [supabase]);
 
+    // Detect sections scheduled for current day/time and auto-suggest
+    const detectScheduledSections = useCallback(async () => {
+        if (!supabase || sections.length === 0) return;
+
+        try {
+            const now = new Date();
+            const dayOfWeek = now.toLocaleDateString("en-US", { weekday: "long" });
+            const currentTime = now.toTimeString().split(" ")[0]; // HH:MM:SS
+
+            // Query section_schedules for current day and time
+            const { data: schedules, error: scheduleError } = await supabase
+                .from("section_schedules")
+                .select("section_id")
+                .eq("day_of_week", dayOfWeek)
+                .lte("start_time", currentTime)
+                .gte("end_time", currentTime);
+
+            if (scheduleError) {
+                console.warn("Could not fetch schedules:", scheduleError);
+                return;
+            }
+
+            // Get section IDs that match current schedule
+            const scheduledIds = schedules?.map(s => s.section_id) || [];
+
+            // Filter to only include sections the user can see
+            const userSectionIds = sections.map(s => s.id);
+            const matchingIds = scheduledIds.filter(id => userSectionIds.includes(id));
+
+            setSuggestedSectionIds(matchingIds);
+
+            // Auto-select if exactly 1 matching section and no active session
+            if (matchingIds.length === 1 && !selectedSectionId) {
+                setSelectedSectionId(matchingIds[0]);
+            }
+        } catch (err) {
+            console.error("Error detecting scheduled sections:", err);
+        }
+    }, [supabase, sections, selectedSectionId]);
+
     useEffect(() => {
         fetchSections();
         checkActiveSession();
     }, [fetchSections, checkActiveSession]);
+
+    // Run schedule detection after sections are loaded
+    useEffect(() => {
+        if (sections.length > 0) {
+            detectScheduledSections();
+        }
+    }, [sections, detectScheduledSections]);
 
     // Start a new class session
     const startClass = useCallback(async (sectionId) => {
@@ -211,6 +272,7 @@ export function useClassSession() {
         isLoading,
         selectedSectionId,
         setSelectedSectionId,
+        suggestedSectionIds,
         startClass,
         endClass,
         error,

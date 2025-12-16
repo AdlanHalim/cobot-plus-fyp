@@ -1,11 +1,10 @@
 // pages/_app.js
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { SessionContextProvider } from '@supabase/auth-helpers-react';
 // We need createClientComponentClient for client-side use
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
-// Your custom config loader
-import { loadConfig } from "@/utils/config";
+// Note: Pi API URL is configured via NEXT_PUBLIC_PI_URL in .env.local
 
 // Your CSS imports
 import '../styles/globals.css';
@@ -20,24 +19,11 @@ import '../styles/manage-roles.css';
 const createSupabaseClient = () => createClientComponentClient();
 
 function MyApp({ Component, pageProps }) {
-  const [ready, setReady] = useState(false);
-
   // Create or retrieve the client instance using useState
   const [supabaseClient] = useState(createSupabaseClient);
 
-
   console.log('SUPABASE URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
   console.log('SUPABASE ANON KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.substring(0, 20) + '...');
-
-  // Config loader for the app (e.g., dynamic API base URL)
-  useEffect(() => {
-    loadConfig()
-      .then(() => setReady(true))
-      .catch((err) => {
-        console.error("⚠️ Failed to load config. Using fallback.", err);
-        setReady(true);
-      });
-  }, []);
 
   // Always wrap with SessionContextProvider so useSupabaseClient hook works
   return (
@@ -45,11 +31,7 @@ function MyApp({ Component, pageProps }) {
       supabaseClient={supabaseClient}
       initialSession={pageProps.initialSession}
     >
-      {!ready ? (
-        <div>Loading configuration...</div>
-      ) : (
-        <Component {...pageProps} />
-      )}
+      <Component {...pageProps} />
     </SessionContextProvider>
   );
 }
