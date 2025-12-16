@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import Image from "next/image";
+import { useSupabaseClient } from "@supabase/auth-helpers-react";
 import { motion } from "framer-motion";
+import { Mail, Lock, User, Hash, ArrowRight } from "lucide-react";
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("");
@@ -13,22 +15,26 @@ export default function SignUpPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
 
-  const supabase = createClientComponentClient();
+  const supabase = useSupabaseClient();
 
   const handleSignUp = async (e) => {
     e.preventDefault();
     setMessage("");
     setIsSubmitting(true);
 
-    // 1. Sign up the user with Supabase Auth
+    if (!supabase) {
+      setMessage("Authentication service is initializing. Please try again.");
+      setIsSubmitting(false);
+      return;
+    }
+
     const { data: authData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        // Pass matric_no and full_name in user_metadata for access in RLS or triggers
         data: {
-            full_name: fullName,
-            matric_no: matricNo,
+          full_name: fullName,
+          matric_no: matricNo,
         }
       }
     });
@@ -38,133 +44,190 @@ export default function SignUpPage() {
       setIsSubmitting(false);
       return;
     }
-    
-    // 2. Insert additional profile data explicitly
-    // This is necessary because user_metadata is not automatically copied to profile columns.
-    if (authData.user) {
-        const { error: profileError } = await supabase
-            .from('profiles')
-            .update({ 
-                full_name: fullName, 
-                matric_no: matricNo 
-            })
-            .eq('id', authData.user.id);
-        
-        if (profileError) {
-            console.error("Profile update error:", profileError);
-            // We proceed anyway, as the user is signed up.
-        }
 
-        // 3. Handle the outcome and redirect
-        if (authData.session) {
-            setMessage("Signup successful! Redirecting to dashboard...");
-        } else {
-            setMessage("Signup successful! Please check your email to confirm your account.");
-        }
-        
-        router.push('/'); 
+    if (authData.user) {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          full_name: fullName,
+          matric_no: matricNo
+        })
+        .eq('id', authData.user.id);
+
+      if (profileError) {
+        console.error("Profile update error:", profileError);
+      }
+
+      if (authData.session) {
+        setMessage("Signup successful! Redirecting...");
+      } else {
+        setMessage("Please check your email to confirm your account.");
+      }
+
+      router.push('/');
     }
-    
+
     setIsSubmitting(false);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-cyan-50 to-teal-50">
-      <motion.div
-        className="w-full max-w-lg bg-white/70 backdrop-blur-md border border-slate-200/50 rounded-3xl shadow-2xl p-8 space-y-6"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <div className="text-center">
-          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-indigo-600 via-sky-600 to-teal-600 bg-clip-text text-transparent mb-2">
-            CObot+ Sign Up
-          </h1>
-          <p className="text-slate-600 text-sm">Create your account to access the Attendance Dashboard.</p>
+    <div className="min-h-screen flex bg-teal-50">
+      {/* Left Side - Branding */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-teal-600 via-teal-700 to-cyan-600 p-12 flex-col justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center overflow-hidden">
+            <Image src="/logo.png" alt="CObot+" width={48} height={48} />
+          </div>
+          <span className="text-white text-2xl font-bold">CObot+</span>
         </div>
 
-        <form className="space-y-4" onSubmit={handleSignUp}>
-          {/* Full Name Field */}
-          <div>
-            <label htmlFor="fullName" className="block text-slate-600 text-sm font-medium mb-1">
-              Full Name
-            </label>
-            <input
-              id="fullName"
-              type="text"
-              placeholder="Your Full Name"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              required
-              className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-400 outline-none transition"
-            />
-          </div>
-
-          {/* Matric No. Field */}
-          <div>
-            <label htmlFor="matricNo" className="block text-slate-600 text-sm font-medium mb-1">
-              Matric No.
-            </label>
-            <input
-              id="matricNo"
-              type="text"
-              placeholder="e.g., A123456"
-              value={matricNo}
-              onChange={(e) => setMatricNo(e.target.value)}
-              required
-              className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-400 outline-none transition"
-            />
-          </div>
-
-          {/* Email Field */}
-          <div>
-            <label htmlFor="email" className="block text-slate-600 text-sm font-medium mb-1">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-400 outline-none transition"
-            />
-          </div>
-
-          {/* Password Field */}
-          <div>
-            <label htmlFor="password" className="block text-slate-600 text-sm font-medium mb-1">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              placeholder="Minimum 6 characters"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-400 outline-none transition"
-            />
-          </div>
-
-          {message && <p className={`text-center text-sm ${message.includes('successful') ? 'text-emerald-600' : 'text-rose-600'}`}>{message}</p>}
-
-          <button
-            type="submit"
-            className="w-full py-2 bg-gradient-to-r from-indigo-500 to-teal-400 hover:scale-[1.01] text-white font-medium text-base rounded-xl shadow-md transition disabled:opacity-50"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? "Signing Up..." : "Sign Up"}
-          </button>
-
-          <p className="text-center text-sm text-slate-600 pt-2">
-            Already have an account?{" "}
-            <Link href="/login" className="text-sky-600 hover:text-sky-700 font-medium transition">Log in</Link>
+        <div>
+          <h1 className="text-4xl font-bold text-white mb-4">
+            Join CObot+<br />Today
+          </h1>
+          <p className="text-white/80 text-lg">
+            Create your account and experience seamless attendance tracking.
           </p>
-        </form>
-      </motion.div>
+        </div>
+
+        <div className="text-white/60 text-sm">
+          © 2024 CObot+ Attendance System
+        </div>
+      </div>
+
+      {/* Right Side - Signup Form */}
+      <div className="flex-1 flex items-center justify-center p-8">
+        <motion.div
+          className="w-full max-w-md"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
+          {/* Mobile Logo */}
+          <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-500 to-cyan-500 flex items-center justify-center overflow-hidden">
+              <Image src="/logo.png" alt="CObot+" width={48} height={48} />
+            </div>
+            <span className="text-slate-800 text-2xl font-bold">CObot+</span>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-slate-800">Create account</h2>
+              <p className="text-slate-500 text-sm mt-1">Fill in your details to get started</p>
+            </div>
+
+            <form onSubmit={handleSignUp} className="space-y-4">
+              {/* Full Name */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Full Name
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Your full name"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    required
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-teal-400 outline-none transition text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Matric No */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Matric No.
+                </label>
+                <div className="relative">
+                  <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="e.g., A123456"
+                    value={matricNo}
+                    onChange={(e) => setMatricNo(e.target.value)}
+                    required
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-teal-400 outline-none transition text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-teal-400 outline-none transition text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Password
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type="password"
+                    placeholder="Min. 6 characters"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-teal-400 outline-none transition text-sm"
+                  />
+                </div>
+              </div>
+
+              {message && (
+                <div className={`px-4 py-3 rounded-xl text-sm ${message.includes('successful') || message.includes('check')
+                  ? 'bg-emerald-50 border border-emerald-200 text-emerald-600'
+                  : 'bg-rose-50 border border-rose-200 text-rose-600'
+                  }`}>
+                  {message}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-medium rounded-xl transition disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Creating account...
+                  </>
+                ) : (
+                  <>
+                    Create Account
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </form>
+
+            <p className="text-center text-sm text-slate-500 mt-6">
+              Already have an account?{" "}
+              <Link href="/login" className="text-teal-600 hover:text-teal-700 font-medium">
+                Sign in
+              </Link>
+            </p>
+          </div>
+        </motion.div>
+      </div>
     </div>
   );
 }
