@@ -28,7 +28,7 @@ function Home() {
 
   // Use custom hooks
   const { userRole, lecturerId } = useUserRole();
-  const { attendanceList, lastUpdate, isBackendOnline, refetch } = useDashboardData(API_BASE);
+  const { attendanceList, activeSection, lastUpdate, isBackendOnline, refetch } = useDashboardData(API_BASE);
   const {
     sections,
     activeSession,
@@ -213,91 +213,90 @@ function Home() {
           <p className="text-xs text-slate-500 mt-1">Face recognitions</p>
         </motion.div>
 
-        {/* Session Status */}
+        {/* Session Status - Automatic Mode */}
         <motion.div
-          className={`rounded-2xl p-5 shadow-sm border ${activeSession ? "bg-gradient-to-br from-teal-500 to-cyan-500 text-white border-transparent" : "bg-white border-slate-100"
+          className={`rounded-2xl p-5 shadow-sm border ${activeSection ? "bg-gradient-to-br from-teal-500 to-cyan-500 text-white border-transparent" : "bg-white border-slate-100"
             }`}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
         >
           <div className="flex items-center justify-between mb-3">
-            <span className={`text-sm ${activeSession ? "text-white/80" : "text-slate-500"}`}>Status</span>
-            <span className={`w-8 h-8 rounded-lg flex items-center justify-center ${activeSession ? "bg-white/20" : "bg-slate-100"
+            <span className={`text-sm ${activeSection ? "text-white/80" : "text-slate-500"}`}>
+              Auto Mode
+            </span>
+            <span className={`w-8 h-8 rounded-lg flex items-center justify-center ${activeSection ? "bg-white/20" : "bg-slate-100"
               }`}>
-              <Video className={`w-4 h-4 ${activeSession ? "text-white" : "text-slate-600"}`} />
+              <Video className={`w-4 h-4 ${activeSection ? "text-white" : "text-slate-600"}`} />
             </span>
           </div>
-          <p className={`text-lg font-bold ${activeSession ? "text-white" : "text-slate-800"}`}>
-            {activeSession ? "Class Active" : "No Active Class"}
+          <p className={`text-lg font-bold ${activeSection ? "text-white" : "text-slate-800"}`}>
+            {activeSection ? (
+              activeSection.status === "late" ? "Late Period" : "Present Period"
+            ) : "No Active Class"}
           </p>
-          <p className={`text-xs mt-1 ${activeSession ? "text-white/70" : "text-slate-500"}`}>
-            {activeSession ? `Started ${activeSession.start_time?.slice(0, 5)}` : "Start a class to record"}
+          <p className={`text-xs mt-1 ${activeSection ? "text-white/70" : "text-slate-500"}`}>
+            {activeSection
+              ? `${activeSection.name} • ${activeSection.window_start || ''} - ${activeSection.window_end || ''}`
+              : "Waiting for scheduled class"}
           </p>
         </motion.div>
       </div>
 
-      {/* Class Control Bar */}
+      {/* Automatic Mode Info Bar */}
       <motion.div
-        className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-6"
+        className={`rounded-2xl p-4 shadow-sm border mb-6 ${activeSection
+          ? activeSection.status === "late"
+            ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white border-transparent"
+            : "bg-gradient-to-r from-emerald-500 to-teal-500 text-white border-transparent"
+          : "bg-white border-slate-100"
+          }`}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
       >
         <div className="flex flex-wrap items-center gap-3">
-          {!activeSession ? (
-            <>
-              <select
-                value={selectedSectionId}
-                onChange={(e) => setSelectedSectionId(e.target.value)}
-                className="flex-1 min-w-[200px] px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-teal-400 focus:outline-none text-sm"
-              >
-                <option value="">Select Section...</option>
-                {sections.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.courses?.code} - {s.name}{suggestedSectionIds?.includes(s.id) ? " ⏰ (Now)" : ""}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={handleStartClass}
-                disabled={!selectedSectionId || sessionLoading}
-                className="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 text-white font-medium rounded-xl hover:bg-emerald-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Play className="w-4 h-4" />
-                Start Class
-              </button>
-            </>
-          ) : (
+          {activeSection ? (
             <>
               <div className="flex-1 flex items-center gap-3">
                 <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${activeSection.status === "late" ? "bg-amber-300" : "bg-emerald-300"
+                    }`}></span>
+                  <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${activeSection.status === "late" ? "bg-amber-200" : "bg-emerald-200"
+                    }`}></span>
                 </span>
                 <div>
-                  <span className="font-semibold text-slate-800">
-                    {activeSession.sections?.courses?.code} - {activeSession.sections?.name}
-                  </span>
-                  <span className="text-sm text-slate-500 ml-2">
-                    Started at {activeSession.start_time?.slice(0, 5)}
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">
+                      {activeSection.courseName || activeSection.name}
+                    </span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${activeSection.status === "late"
+                      ? "bg-amber-600 text-amber-100"
+                      : "bg-emerald-600 text-emerald-100"
+                      }`}>
+                      {activeSection.status === "late" ? "LATE PERIOD" : "ON TIME"}
+                    </span>
+                  </div>
+                  <span className="text-sm opacity-80">
+                    Automatic tracking • Window: {activeSection.window_start} - {activeSection.window_end}
                   </span>
                 </div>
               </div>
               <button
                 onClick={() => setShowManualModal(true)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 text-white font-medium rounded-xl hover:bg-teal-700 transition"
+                className="flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 font-medium rounded-xl transition"
               >
                 <UserPlus className="w-4 h-4" />
                 Manual Add
               </button>
-              <button
-                onClick={handleEndClass}
-                className="flex items-center gap-2 px-4 py-2.5 bg-rose-500 text-white font-medium rounded-xl hover:bg-rose-600 transition"
-              >
-                <Square className="w-4 h-4" />
-                End Class
-              </button>
             </>
+          ) : (
+            <div className="flex-1 flex items-center gap-3 text-slate-500">
+              <Clock className="w-5 h-5" />
+              <div>
+                <span className="font-medium text-slate-700">Automatic Mode Active</span>
+                <p className="text-sm">Attendance will be recorded automatically when a scheduled class begins</p>
+              </div>
+            </div>
           )}
         </div>
       </motion.div>

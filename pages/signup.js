@@ -28,6 +28,13 @@ export default function SignUpPage() {
       return;
     }
 
+    // First, check if student exists with this matric number
+    const { data: existingStudent } = await supabase
+      .from("students")
+      .select("id, email")
+      .eq("matric_no", matricNo.trim().toUpperCase())
+      .single();
+
     const { data: authData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
@@ -46,12 +53,22 @@ export default function SignUpPage() {
     }
 
     if (authData.user) {
+      // Update profile with full_name, matric_no, and link student_id if found
+      const profileUpdate = {
+        full_name: fullName,
+        matric_no: matricNo.trim().toUpperCase(),
+        email: email,
+      };
+
+      // If student record exists, link it
+      if (existingStudent?.id) {
+        profileUpdate.student_id = existingStudent.id;
+        profileUpdate.role = "student"; // Ensure role is set to student
+      }
+
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({
-          full_name: fullName,
-          matric_no: matricNo
-        })
+        .update(profileUpdate)
         .eq('id', authData.user.id);
 
       if (profileError) {
@@ -60,11 +77,13 @@ export default function SignUpPage() {
 
       if (authData.session) {
         setMessage("Signup successful! Redirecting...");
+        // Redirect students to student-view, others to dashboard
+        setTimeout(() => {
+          router.push(existingStudent?.id ? '/student-view' : '/');
+        }, 1000);
       } else {
         setMessage("Please check your email to confirm your account.");
       }
-
-      router.push('/');
     }
 
     setIsSubmitting(false);

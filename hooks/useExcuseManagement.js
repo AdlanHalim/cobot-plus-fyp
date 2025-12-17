@@ -4,36 +4,69 @@ import { useSupabaseClient, useSession } from "@supabase/auth-helpers-react";
 /**
  * Custom hook for managing excuse submissions.
  * Handles creating, viewing, and updating excuse records.
+ * 
+ * @param {Object} options - Configuration options
+ * @param {boolean} options.isAdmin - If true, show all excuses (admin mode)
+ * @param {boolean} options.isLecturer - If true, filter by lecturer's sections
  */
 export function useExcuseManagement(options = {}) {
     const supabase = useSupabaseClient();
     const session = useSession();
-    const { isAdmin = false } = options;
+    const { isAdmin = false, isLecturer = false } = options;
 
     const [excuses, setExcuses] = useState([]);
     const [sections, setSections] = useState([]);
+    const [lecturerSections, setLecturerSections] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
     const [studentId, setStudentId] = useState(null);
+    const [lecturerId, setLecturerId] = useState(null);
 
-    // Get student ID from profile
+    // Get student ID or lecturer ID from profile
     useEffect(() => {
-        const fetchStudentId = async () => {
+        const fetchProfile = async () => {
             if (!session?.user?.id) return;
 
             const { data, error } = await supabase
                 .from("profiles")
-                .select("student_id")
+                .select("student_id, lecturer_uuid, role")
                 .eq("id", session.user.id)
                 .single();
 
             if (data?.student_id) {
                 setStudentId(data.student_id);
             }
+            if (data?.lecturer_uuid) {
+                setLecturerId(data.lecturer_uuid);
+            }
         };
 
-        fetchStudentId();
+        fetchProfile();
     }, [session, supabase]);
+
+    // Fetch lecturer's sections
+    useEffect(() => {
+        const fetchLecturerSections = async () => {
+            if (!supabase || !lecturerId) return;
+
+            const { data } = await supabase
+                .from("sections")
+                .select(`
+                    id,
+                    name,
+                    courses (code, name)
+                `)
+                .eq("lecturer_id", lecturerId);
+
+            if (data) {
+                setLecturerSections(data);
+            }
+        };
+
+        if (isLecturer && lecturerId) {
+            fetchLecturerSections();
+        }
+    }, [supabase, lecturerId, isLecturer]);
 
     // Fetch excuses
     const fetchExcuses = useCallback(async () => {
@@ -46,32 +79,46 @@ export function useExcuseManagement(options = {}) {
             let query = supabase
                 .from("excuses")
                 .select(`
-          *,
-          students (name, matric_no),
-          sections (
-            name,
-            courses (code, name)
-          ),
-          class_sessions (class_date)
-        `)
+                    *,
+                    students (name, matric_no, email),
+                    sections (
+                        id,
+                        name,
+                        lecturer_id,
+                        courses (code, name)
+                    ),
+                    class_sessions (class_date)
+                `)
                 .order("created_at", { ascending: false });
 
-            // If student, filter to their own excuses
-            if (!isAdmin && studentId) {
+            // Filter based on role
+            if (!isAdmin && !isLecturer && studentId) {
+                // Student: only their own excuses
                 query = query.eq("student_id", studentId);
             }
 
             const { data, error: fetchError } = await query;
 
             if (fetchError) throw fetchError;
-            setExcuses(data || []);
+
+            let filteredData = data || [];
+
+            // For lecturers, filter excuses to only their sections
+            if (isLecturer && lecturerId && !isAdmin) {
+                const lecturerSectionIds = lecturerSections.map((s) => s.id);
+                filteredData = filteredData.filter((e) =>
+                    lecturerSectionIds.includes(e.section_id)
+                );
+            }
+
+            setExcuses(filteredData);
         } catch (err) {
             console.error("Error fetching excuses:", err);
             setError(err.message);
         } finally {
             setIsLoading(false);
         }
-    }, [supabase, isAdmin, studentId]);
+    }, [supabase, isAdmin, isLecturer, studentId, lecturerId, lecturerSections]);
 
     // Fetch sections for student dropdown
     const fetchSections = useCallback(async () => {
@@ -80,13 +127,13 @@ export function useExcuseManagement(options = {}) {
         const { data } = await supabase
             .from("student_section_enrollments")
             .select(`
-        section_id,
-        sections (
-          id,
-          name,
-          courses (code, name)
-        )
-      `)
+                section_id,
+                sections (
+                    id,
+                    name,
+                    courses (code, name)
+                )
+            `)
             .eq("student_id", studentId);
 
         if (data) {
@@ -95,13 +142,14 @@ export function useExcuseManagement(options = {}) {
     }, [supabase, studentId]);
 
     useEffect(() => {
-        if (studentId || isAdmin) {
+        const shouldFetch = studentId || isAdmin || (isLecturer && lecturerSections.length > 0);
+        if (shouldFetch) {
             fetchExcuses();
         }
         if (studentId) {
             fetchSections();
         }
-    }, [fetchExcuses, fetchSections, studentId, isAdmin]);
+    }, [fetchExcuses, fetchSections, studentId, isAdmin, isLecturer, lecturerSections]);
 
     // Submit new excuse
     const submitExcuse = useCallback(
@@ -138,7 +186,7 @@ export function useExcuseManagement(options = {}) {
         [supabase, studentId, fetchExcuses]
     );
 
-    // Review excuse (approve/reject) - Admin only
+    // Review excuse (approve/reject) - Admin/Lecturer only
     const reviewExcuse = useCallback(
         async (excuseId, status, adminNotes = "") => {
             if (!supabase || !session?.user?.id) {
@@ -153,7 +201,6 @@ export function useExcuseManagement(options = {}) {
                         reviewed_by: session.user.id,
                         reviewed_at: new Date().toISOString(),
                         admin_notes: adminNotes,
-                        updated_at: new Date().toISOString(),
                     })
                     .eq("id", excuseId);
 
@@ -215,12 +262,15 @@ export function useExcuseManagement(options = {}) {
     return {
         excuses,
         sections,
+        lecturerSections,
         isLoading,
         error,
         studentId,
+        lecturerId,
         submitExcuse,
         reviewExcuse,
         uploadDocument,
         refetch: fetchExcuses,
     };
 }
+

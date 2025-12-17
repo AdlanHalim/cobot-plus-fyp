@@ -1,10 +1,32 @@
 "use client";
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import { useSupabaseClient, useSession } from '@supabase/auth-helpers-react';
 import { LockClosedIcon } from '@heroicons/react/24/outline';
 
 export default function UnauthorizedPage() {
   const router = useRouter();
+  const supabase = useSupabaseClient();
+  const session = useSession();
+  const [redirectPath, setRedirectPath] = useState('/');
+
+  // Determine redirect path based on user role
+  useEffect(() => {
+    const fetchRole = async () => {
+      if (!session?.user?.id) return;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", session.user.id)
+        .single();
+
+      const userRole = profile?.role || "student";
+      setRedirectPath(userRole === "student" ? "/student-view" : "/");
+    };
+
+    fetchRole();
+  }, [session, supabase]);
 
   return (
     <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-red-50 via-rose-50 to-pink-50 text-slate-700 p-6">
@@ -15,10 +37,10 @@ export default function UnauthorizedPage() {
           You do not have the required permissions to view this page.
         </p>
         <button
-          onClick={() => router.push('/')}
-          className="w-full py-3 rounded-xl text-white font-medium bg-gradient-to-r from-indigo-500 to-teal-500 hover:scale-[1.02] transition shadow-md"
+          onClick={() => router.push(redirectPath)}
+          className="w-full py-3 rounded-xl text-white font-medium bg-gradient-to-r from-teal-500 to-cyan-500 hover:scale-[1.02] transition shadow-md"
         >
-          Go to Dashboard
+          Go Back
         </button>
       </div>
     </div>

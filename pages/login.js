@@ -26,19 +26,32 @@ export default function LoginPage() {
       return;
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data: authData, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    setIsLoggingIn(false);
-
     if (error) {
       setErrorMsg(error.message);
+      setIsLoggingIn(false);
       return;
     }
 
-    router.push("/");
+    // Fetch user profile to determine redirect destination
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", authData.user.id)
+      .single();
+
+    const userRole = profile?.role || "student";
+
+    // Redirect based on role
+    if (userRole === "student") {
+      router.push("/student-view");
+    } else {
+      router.push("/");
+    }
   };
 
   return (

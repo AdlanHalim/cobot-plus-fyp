@@ -1,6 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSupabaseClient } from "@supabase/auth-helpers-react";
 
+// Helper to get Pi API headers (with optional API key)
+const getPiHeaders = () => {
+    const headers = { "Content-Type": "application/json" };
+    const apiKey = process.env.NEXT_PUBLIC_PI_API_KEY;
+    if (apiKey) {
+        headers["X-API-Key"] = apiKey;
+    }
+    return headers;
+};
+
 /**
  * Custom hook for managing class sessions (Start/End class functionality).
  * Now supports lecturer filtering and schedule-based auto-suggest.
@@ -201,7 +211,7 @@ export function useClassSession({ lecturerId, userRole } = {}) {
             try {
                 await fetch(`${apiBase}/api/start-class`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: getPiHeaders(),
                     body: JSON.stringify({
                         session_id: data.id,
                         section_id: sectionId,
@@ -247,7 +257,7 @@ export function useClassSession({ lecturerId, userRole } = {}) {
             try {
                 await fetch(`${apiBase}/api/end-class`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: getPiHeaders(),
                     body: JSON.stringify({
                         session_id: activeSession.id,
                     }),

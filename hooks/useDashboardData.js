@@ -1,8 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 /**
  * Custom hook for fetching dashboard data from the Raspberry Pi backend.
  * Handles attendance list, active class info, and backend connectivity status.
+ * 
+ * Features:
+ * - Smart polling that pauses when tab is hidden (saves bandwidth)
+ * - Auto-reconnect when backend comes back online
  * 
  * @param {string} apiBase - Base URL of the Raspberry Pi API
  * @param {number} pollingInterval - Interval in ms for polling (default: 15000)
@@ -22,6 +26,9 @@ export function useDashboardData(apiBase, pollingInterval = 15000) {
     const [lastUpdate, setLastUpdate] = useState(null);
     const [isBackendOnline, setIsBackendOnline] = useState(true);
     const [isLoading, setIsLoading] = useState(true);
+    const [isTabVisible, setIsTabVisible] = useState(true);
+
+    const intervalRef = useRef(null);
 
     const fetchData = useCallback(async () => {
         try {
@@ -51,30 +58,66 @@ export function useDashboardData(apiBase, pollingInterval = 15000) {
                 }
             }
 
-            // Update states only if data exists
-            if (classData?.activeClass) {
-                setActiveSection(classData.activeClass);
+            // Update active section (includes auto-mode info)
+            if (classData) {
+                setActiveSection(classData.activeClass || null);
             }
 
+            // Update attendance list
             if (attendanceData?.attendance) {
                 setAttendanceList(attendanceData.attendance);
+            } else if (!classData?.activeClass) {
+                // Clear attendance if no active class
+                setAttendanceList([]);
             }
 
             setLastUpdate(new Date().toLocaleTimeString());
             setIsBackendOnline(true);
         } catch (err) {
-            console.warn("⚠️ Backend unreachable or unexpected error:", err);
+            console.warn("Backend unreachable:", err);
             setIsBackendOnline(false);
         } finally {
             setIsLoading(false);
         }
     }, [apiBase]);
 
+    // Track tab visibility to pause polling when hidden
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            setIsTabVisible(!document.hidden);
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    }, []);
+
+    // Smart polling - pause when tab is hidden
     useEffect(() => {
         fetchData();
-        const interval = setInterval(fetchData, pollingInterval);
-        return () => clearInterval(interval);
-    }, [fetchData, pollingInterval]);
+
+        // Clear existing interval
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+        }
+
+        // Only poll when tab is visible
+        if (isTabVisible) {
+            intervalRef.current = setInterval(fetchData, pollingInterval);
+        }
+
+        return () => {
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+            }
+        };
+    }, [fetchData, pollingInterval, isTabVisible]);
+
+    // Immediate refetch when tab becomes visible again
+    useEffect(() => {
+        if (isTabVisible) {
+            fetchData();
+        }
+    }, [isTabVisible, fetchData]);
 
     return {
         attendanceList,
