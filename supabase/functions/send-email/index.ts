@@ -1,18 +1,45 @@
-// supabase/functions/send-email/index.ts (FIXED VERSION)
+/**
+ * @file index.ts
+ * @location cobot-plus-fyp/supabase/functions/send-email/index.ts
+ * 
+ * @description
+ * Supabase Edge Function for sending email notifications.
+ * Handles warning and barring emails for attendance interventions.
+ * 
+ * Features:
+ * - Sends emails via Gmail SMTP using Nodemailer
+ * - Updates database flags (warning_sent, barring_sent)
+ * - CORS-enabled for cross-origin requests
+ * 
+ * Required Secrets:
+ * - EMAIL_USER: Gmail address
+ * - EMAIL_PASS: Gmail app password
+ * - SUPABASE_SERVICE_ROLE_KEY: For DB writes
+ * 
+ * @method POST
+ * @param {Object} body
+ * @param {string} body.to - Recipient email
+ * @param {string} body.subject - Email subject
+ * @param {string} body.content - Email body text
+ * @param {string} body.student_id - For DB update
+ * @param {string} body.section_id - For DB update
+ * @param {string} body.email_type - "warning" or "barring"
+ */
+
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-// Import Supabase Client for database operations
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import nodemailer from "npm:nodemailer@6.9.7";
 
+// CORS headers for cross-origin requests
 export const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Initialize Supabase client using the Service Role Key for DB write permissions
+// Initialize Supabase client with Service Role Key for DB write permissions
+// CRITICAL: Use Service Role Key from secrets, NOT the Anon key
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
-  // **CRITICAL:** Use the Service Role Key from secrets, NOT the Anon key
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 );
 

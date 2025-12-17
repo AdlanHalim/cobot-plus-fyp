@@ -1,10 +1,31 @@
-// utils/withRole.js
+/**
+ * @file withRole.js
+ * @location cobot-plus-fyp/utils/withRole.js
+ * 
+ * @description
+ * Higher-Order Component (HOC) for role-based access control.
+ * Wraps page components to enforce authentication and authorization.
+ * 
+ * @example
+ * // Protect a page for admin and lecturer only
+ * export default withRole(AnalysisPage, ["admin", "lecturer"]);
+ * 
+ * // Protect a page for students only
+ * export default withRole(StudentDashboard, ["student"]);
+ */
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import { useUser, useSupabaseClient, useSessionContext } from '@supabase/auth-helpers-react'; // Import useSessionContext
+import { useSessionContext } from '@supabase/auth-helpers-react';
 import { motion } from "framer-motion";
+import { useUserRole } from "@/hooks";
 
-// Simple Component to show while loading/redirecting
+/**
+ * Loading spinner component displayed while checking authentication/authorization.
+ * Shows an animated spinner with a friendly message.
+ * 
+ * @returns {JSX.Element} Full-screen loading spinner
+ */
 const LoadingSpinner = () => (
   <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-indigo-50 via-sky-50 to-teal-50">
     <motion.div
@@ -16,73 +37,71 @@ const LoadingSpinner = () => (
   </div>
 );
 
+/**
+ * Higher-Order Component that enforces role-based access control.
+ * 
+ * @param {React.ComponentType} Component - The component to wrap and protect
+ * @param {string[]} allowedRoles - Array of roles that can access this component
+ *                                  Valid roles: "admin", "lecturer", "student"
+ * @returns {React.ComponentType} Protected component with access control
+ * 
+ * @description
+ * Authorization Flow:
+ * 1. Wait for Supabase session to load
+ * 2. Wait for user role to be fetched from profiles table
+ * 3. If no session → redirect to /login
+ * 4. If session but role not in allowedRoles → redirect to /unauthorized
+ * 5. If authorized → render the protected component
+ * 
+ * @example
+ * // pages/analysis.js
+ * function AnalysisPage() {
+ *   return <div>Analytics Dashboard</div>;
+ * }
+ * export default withRole(AnalysisPage, ["admin", "lecturer"]);
+ */
 export default function withRole(Component, allowedRoles = []) {
   return function RoleProtected(props) {
     const router = useRouter();
-    const user = useUser();
-    const supabase = useSupabaseClient();
-    // CRITICAL: Get the session status check
-    const { isLoading: isSupabaseLoading, session } = useSessionContext(); 
-    
-    const [loading, setLoading] = useState(true);
+    const { isLoading: isSupabaseLoading, session } = useSessionContext();
+
+    // Use shared useUserRole hook instead of duplicate DB call
+    const { userRole, isLoading: isRoleLoading } = useUserRole();
+
     const [authorized, setAuthorized] = useState(false);
+    const [checked, setChecked] = useState(false);
 
     useEffect(() => {
-      // 1. Wait for Supabase to finish checking the session cookie (isSupabaseLoading)
-      // This is the key difference from just checking 'user === undefined'.
-      if (isSupabaseLoading) return; 
+      // Wait for Supabase session and role to load
+      if (isSupabaseLoading || isRoleLoading) return;
 
-      // 2. Not Logged In (session is null after loading): Redirect to login immediately.
+      // Not logged in - redirect to login
       if (!session) {
-        setLoading(false);
         router.replace("/login");
+        setChecked(true);
         return;
       }
 
-      // 3. Logged In: Check the user's explicit role from the database.
-      const checkProfile = async () => {
-        try {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("role")
-            .eq("id", user.id)
-            .single();
+      // Session exists but no role yet (still loading)
+      if (!userRole) return;
 
-          const userRole = profile?.role || 'student';
-
-          // 4. Check Authorization
-          if (allowedRoles.includes(userRole)) {
-            setAuthorized(true);
-          } else {
-            // Logged in, but unauthorized for this page
-            router.replace("/unauthorized");
-          }
-          setLoading(false);
-
-        } catch (err) {
-            console.error("Error fetching role:", err);
-            router.replace("/unauthorized");
-            setLoading(false);
-        }
-      };
-
-      // Only run the DB check if the session is present (not null)
-      if (session) {
-        checkProfile();
+      // Check authorization
+      if (allowedRoles.includes(userRole)) {
+        setAuthorized(true);
+      } else {
+        router.replace("/unauthorized");
       }
+      setChecked(true);
+    }, [isSupabaseLoading, isRoleLoading, session, userRole, router, allowedRoles]);
 
-    }, [isSupabaseLoading, session, router, allowedRoles, supabase, user]);
-
-    // 5. Render Guards
-    // IMPORTANT: Check isSupabaseLoading to continue showing the spinner until the session check is finished.
-    if (isSupabaseLoading || loading) {
-      return <LoadingSpinner />; 
+    // Show loading while checking
+    if (isSupabaseLoading || isRoleLoading || !checked) {
+      return <LoadingSpinner />;
     }
 
+    // Not authorized - null while redirecting
     if (!authorized) {
-      // If we finished checking (loading is false) and are not authorized, 
-      // the router.replace() call handles redirecting, so we render nothing.
-      return null; 
+      return null;
     }
 
     // Access granted

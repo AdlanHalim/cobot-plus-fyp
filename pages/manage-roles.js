@@ -1,11 +1,11 @@
 "use client";
 import React, { useState, useEffect } from "react";
 // ✅ CORRECTED PATH: Removed one '..' level
-import DashboardLayout from "../components/DashboardLayout"; 
+import DashboardLayout from "../components/layout/DashboardLayout";
 // External dependencies
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"; 
+import { useSupabaseClient } from "@supabase/auth-helpers-react";
 import { toast, ToastContainer } from "react-toastify";
-import withRole from "../utils/withRole"; 
+import withRole from "../utils/withRole";
 import ReactModal from "react-modal";
 import { Cog6ToothIcon } from "@heroicons/react/24/outline";
 
@@ -21,7 +21,7 @@ const RoleBadge = ({ role }) => {
     case 'admin':
       return <span className={`${baseClasses} bg-rose-100 text-rose-700`}>Admin</span>;
     case 'lecturer':
-      return <span className={`${baseClasses} bg-indigo-100 text-indigo-700`}>Lecturer</span>;
+      return <span className={`${baseClasses} bg-cyan-100 text-cyan-700`}>Lecturer</span>;
     case 'student':
     default:
       return <span className={`${baseClasses} bg-teal-100 text-teal-700`}>Student</span>;
@@ -29,7 +29,7 @@ const RoleBadge = ({ role }) => {
 };
 
 function ManageUsers() {
-  const supabase = createClientComponentClient();
+  const supabase = useSupabaseClient();
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -72,7 +72,7 @@ function ManageUsers() {
     }
 
     setIsUpdating(true);
-    
+
     // Update the role in the profiles table
     const { error } = await supabase
       .from("profiles")
@@ -119,12 +119,13 @@ function ManageUsers() {
   return (
     <DashboardLayout>
       <ToastContainer />
-      <div className="min-h-screen p-8 bg-[#e6f0fb] text-slate-700 flex flex-col">
-        <h1 className="text-3xl font-bold text-center mb-8 bg-gradient-to-r from-indigo-600 via-sky-600 to-teal-600 bg-clip-text text-transparent">
-          ⚙️ Admin Role Management
-        </h1>
+      <div className="min-h-screen p-8 text-slate-700 flex flex-col">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-slate-800">Role Management</h1>
+          <p className="text-slate-500 text-sm">Assign system permissions to users</p>
+        </div>
 
-        <div className="bg-white/70 backdrop-blur-md rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
           <table className="min-w-full border-collapse text-sm">
             <thead>
               <tr className="bg-slate-100/80 text-slate-600 text-xs uppercase tracking-wider">
@@ -152,7 +153,7 @@ function ManageUsers() {
                     <td className="px-4 py-3 text-center">
                       <button
                         onClick={() => openEditModal(p)}
-                        className="p-2 rounded-full bg-indigo-500/10 text-indigo-600 hover:bg-indigo-500 hover:text-white transition"
+                        className="p-2 rounded-full bg-teal-500/10 text-teal-600 hover:bg-teal-500 hover:text-white transition"
                         title="Edit Role"
                       >
                         <Cog6ToothIcon className="w-5 h-5" />
@@ -165,18 +166,18 @@ function ManageUsers() {
           </table>
         </div>
       </div>
-      
+
       {/* Role Edit Modal */}
       {selectedProfile && (
         <RoleEditModal
-            isOpen={isModalOpen}
-            onRequestClose={() => setIsModalOpen(false)}
-            profile={selectedProfile}
-            newRole={newRole}
-            setNewRole={setNewRole}
-            handleRoleUpdate={handleRoleUpdate}
-            isUpdating={isUpdating}
-            styles={modalStyles}
+          isOpen={isModalOpen}
+          onRequestClose={() => setIsModalOpen(false)}
+          profile={selectedProfile}
+          newRole={newRole}
+          setNewRole={setNewRole}
+          handleRoleUpdate={handleRoleUpdate}
+          isUpdating={isUpdating}
+          styles={modalStyles}
         />
       )}
 
@@ -186,47 +187,47 @@ function ManageUsers() {
 
 // Separate component for the modal content
 const RoleEditModal = ({ isOpen, onRequestClose, profile, newRole, setNewRole, handleRoleUpdate, isUpdating, styles }) => (
-    <ReactModal
-        isOpen={isOpen}
-        onRequestClose={onRequestClose}
-        style={styles}
-    >
-        <h2 className="text-xl font-bold mb-4 text-slate-800">Edit Role for {profile.full_name}</h2>
-        <p className="text-sm text-slate-600 mb-6">Current Role: <RoleBadge role={profile.role} /></p>
+  <ReactModal
+    isOpen={isOpen}
+    onRequestClose={onRequestClose}
+    style={styles}
+  >
+    <h2 className="text-xl font-bold mb-4 text-slate-800">Edit Role for {profile.full_name}</h2>
+    <p className="text-sm text-slate-600 mb-6">Current Role: <RoleBadge role={profile.role} /></p>
 
-        <div className="mb-8">
-            <label htmlFor="role-select" className="block text-sm font-medium text-slate-700 mb-2">
-                Select New Role
-            </label>
-            <select
-                id="role-select"
-                value={newRole}
-                onChange={(e) => setNewRole(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white shadow-sm focus:ring-sky-500 focus:border-sky-500"
-            >
-                <option value="student">Student</option>
-                <option value="lecturer">Lecturer</option>
-                <option value="admin">Admin</option>
-            </select>
-        </div>
+    <div className="mb-8">
+      <label htmlFor="role-select" className="block text-sm font-medium text-slate-700 mb-2">
+        Select New Role
+      </label>
+      <select
+        id="role-select"
+        value={newRole}
+        onChange={(e) => setNewRole(e.target.value)}
+        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white shadow-sm focus:ring-teal-500 focus:border-teal-500"
+      >
+        <option value="student">Student</option>
+        <option value="lecturer">Lecturer</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
 
-        <div className="flex justify-end gap-3">
-            <button
-                onClick={onRequestClose}
-                className="px-4 py-2 rounded-lg bg-slate-200/70 hover:bg-slate-300/80 transition text-sm"
-                disabled={isUpdating}
-            >
-                Cancel
-            </button>
-            <button
-                onClick={handleRoleUpdate}
-                className="px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-teal-500 to-indigo-500 hover:scale-[1.03] transition text-sm disabled:opacity-50"
-                disabled={isUpdating}
-            >
-                {isUpdating ? "Saving..." : "Update Role"}
-            </button>
-        </div>
-    </ReactModal>
+    <div className="flex justify-end gap-3">
+      <button
+        onClick={onRequestClose}
+        className="px-4 py-2 rounded-lg bg-slate-200/70 hover:bg-slate-300/80 transition text-sm"
+        disabled={isUpdating}
+      >
+        Cancel
+      </button>
+      <button
+        onClick={handleRoleUpdate}
+        className="px-4 py-2 rounded-lg text-white font-medium bg-gradient-to-r from-teal-500 to-cyan-500 hover:scale-[1.03] transition text-sm disabled:opacity-50"
+        disabled={isUpdating}
+      >
+        {isUpdating ? "Saving..." : "Update Role"}
+      </button>
+    </div>
+  </ReactModal>
 );
 
 
