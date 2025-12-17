@@ -1,7 +1,33 @@
+/**
+ * @file send-warning.js
+ * @location cobot-plus-fyp/pages/api/send-warning.js
+ * 
+ * @description
+ * API route for batch sending warning emails to students with 3+ absences.
+ * Admin-only endpoint that queries student_course_attendance and triggers
+ * email notifications via Supabase edge function.
+ * 
+ * @method POST
+ * @access Admin only (verified via bearer token and profile role check)
+ * 
+ * Request:
+ * - Headers: Authorization: Bearer <token>
+ * 
+ * Response:
+ * - 200: { success: true, count: number, total: number }
+ * - 401: Unauthorized (no token or invalid token)
+ * - 403: Forbidden (not admin)
+ * - 500: Server error
+ */
+
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
 
+/**
+ * API Handler for sending warning emails
+ * Queries students with 3+ absences and warning_sent = false
+ */
 export default async function handler(req, res) {
   // Only allow POST requests
   if (req.method !== "POST") {

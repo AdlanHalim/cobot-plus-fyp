@@ -1,11 +1,31 @@
-// utils/withRole.js
+/**
+ * @file withRole.js
+ * @location cobot-plus-fyp/utils/withRole.js
+ * 
+ * @description
+ * Higher-Order Component (HOC) for role-based access control.
+ * Wraps page components to enforce authentication and authorization.
+ * 
+ * @example
+ * // Protect a page for admin and lecturer only
+ * export default withRole(AnalysisPage, ["admin", "lecturer"]);
+ * 
+ * // Protect a page for students only
+ * export default withRole(StudentDashboard, ["student"]);
+ */
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { useSessionContext } from '@supabase/auth-helpers-react';
 import { motion } from "framer-motion";
 import { useUserRole } from "@/hooks";
 
-// Simple Component to show while loading/redirecting
+/**
+ * Loading spinner component displayed while checking authentication/authorization.
+ * Shows an animated spinner with a friendly message.
+ * 
+ * @returns {JSX.Element} Full-screen loading spinner
+ */
 const LoadingSpinner = () => (
   <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-indigo-50 via-sky-50 to-teal-50">
     <motion.div
@@ -17,6 +37,29 @@ const LoadingSpinner = () => (
   </div>
 );
 
+/**
+ * Higher-Order Component that enforces role-based access control.
+ * 
+ * @param {React.ComponentType} Component - The component to wrap and protect
+ * @param {string[]} allowedRoles - Array of roles that can access this component
+ *                                  Valid roles: "admin", "lecturer", "student"
+ * @returns {React.ComponentType} Protected component with access control
+ * 
+ * @description
+ * Authorization Flow:
+ * 1. Wait for Supabase session to load
+ * 2. Wait for user role to be fetched from profiles table
+ * 3. If no session → redirect to /login
+ * 4. If session but role not in allowedRoles → redirect to /unauthorized
+ * 5. If authorized → render the protected component
+ * 
+ * @example
+ * // pages/analysis.js
+ * function AnalysisPage() {
+ *   return <div>Analytics Dashboard</div>;
+ * }
+ * export default withRole(AnalysisPage, ["admin", "lecturer"]);
+ */
 export default function withRole(Component, allowedRoles = []) {
   return function RoleProtected(props) {
     const router = useRouter();

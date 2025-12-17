@@ -1,3 +1,21 @@
+/**
+ * @file submit-excuse.js
+ * @location cobot-plus-fyp/pages/submit-excuse.js
+ * 
+ * @description
+ * Excuse submission page for students.
+ * Submit excuses for absences with supporting documentation.
+ * 
+ * Features:
+ * - Section selection from student's enrollments
+ * - Excuse type selection (Medical, Emergency, Official Event, Other)
+ * - Reason text area
+ * - Document upload (images/PDF) to Supabase Storage
+ * - Submission history with status badges
+ * 
+ * @access Student (protected by withRole HOC)
+ */
+
 "use client";
 
 import { useState } from "react";
@@ -8,6 +26,8 @@ import "react-toastify/dist/ReactToastify.css";
 import { FileText, Upload, Send, Clock, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 import withRole from "../utils/withRole";
 import { useExcuseManagement } from "@/hooks";
+
+// Available excuse types for submission form dropdown
 
 const EXCUSE_TYPES = [
     { value: "medical", label: "Medical Certificate (MC)", icon: "🏥" },

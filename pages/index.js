@@ -1,3 +1,22 @@
+/**
+ * @file index.js
+ * @location cobot-plus-fyp/pages/index.js
+ * 
+ * @description
+ * Main Dashboard page for the CObot+ Attendance System.
+ * Displays live camera feed from Raspberry Pi, real-time attendance list,
+ * and session controls for lecturers/admins.
+ * 
+ * Features:
+ * - Live MJPEG video stream from Raspberry Pi camera
+ * - Real-time attendance tracking with toast notifications
+ * - Auto-mode display showing current class window and status
+ * - Manual student add functionality for edge cases
+ * - Stats cards (Present, Late, Total Detected, Session Status)
+ * 
+ * @access Admin, Lecturer (protected by withRole HOC)
+ */
+
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useRef } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
@@ -8,8 +27,9 @@ import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { UserPlus, Play, Square, Users, Search, X, Video, Clock, CheckCircle } from "lucide-react";
 
+// Raspberry Pi API configuration from environment variables
 const API_BASE = process.env.NEXT_PUBLIC_PI_URL || "http://192.168.252.103:5000";
-const VIDEO_URL = `${API_BASE}/video`;
+const VIDEO_URL = `${API_BASE}/video`; // MJPEG stream endpoint
 
 function Home() {
   const supabase = useSupabaseClient();

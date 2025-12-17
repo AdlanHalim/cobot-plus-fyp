@@ -1,3 +1,21 @@
+/**
+ * @file manage-excuses.js
+ * @location cobot-plus-fyp/pages/manage-excuses.js
+ * 
+ * @description
+ * Excuse management page for admins and lecturers.
+ * Review, approve, or reject student excuse submissions.
+ * 
+ * Features:
+ * - Stats: Pending count, Approved today, Total submissions
+ * - Filter by status (Pending/Approved/Rejected) and section
+ * - Review modal with excuse details and document view
+ * - Approve/Reject with admin notes
+ * - Auto-updates attendance status to "excused" on approval
+ * 
+ * @access Admin, Lecturer (protected by withRole HOC)
+ */
+
 "use client";
 
 import { useState } from "react";
@@ -10,6 +28,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import withRole from "../utils/withRole";
 import { useExcuseManagement, useUserRole } from "@/hooks";
 import ReactModal from "react-modal";
+
+// Set ReactModal app element for accessibility (prevents body scroll when modal open)
 
 if (typeof window !== "undefined") {
     ReactModal.setAppElement("body");

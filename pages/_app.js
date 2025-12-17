@@ -1,28 +1,59 @@
-// pages/_app.js
+/**
+ * @file _app.js
+ * @location cobot-plus-fyp/pages/_app.js
+ * 
+ * @description
+ * Next.js custom App component for the CObot+ Attendance System.
+ * Wraps all pages with Supabase session provider for authentication.
+ * 
+ * Key responsibilities:
+ * - Initialize Supabase client for client-side usage
+ * - Provide session context to all pages via SessionContextProvider
+ * - Import global CSS styles
+ * - Handle server-side session pre-fetching
+ * 
+ * @see https://nextjs.org/docs/advanced-features/custom-app
+ */
+
 import { useState } from 'react';
 import { SessionContextProvider } from '@supabase/auth-helpers-react';
-// We need createClientComponentClient for client-side use
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
-// Note: Pi API URL is configured via NEXT_PUBLIC_PI_URL in .env.local
+// Global stylesheet imports
+// These styles are applied to all pages in the application
+import '../styles/globals.css';       // Tailwind base, components, utilities + CSS variables
+import '../styles/Navbar.module.css'; // Navbar-specific styles
+import '../styles/login.css';         // Login page styles
+import '../styles/signup.css';        // Signup page styles
+import '../styles/manage-roles.css';  // Role management page styles
 
-// Your CSS imports
-import '../styles/globals.css';
-import '../styles/Navbar.module.css';
-import '../styles/login.css';
-import '../styles/signup.css';
-import '../styles/manage-roles.css';
-
-
-// Define a function to create the client that will be used inside the component
-// The client will be created only once within the functional component's scope.
+/**
+ * Factory function to create Supabase client.
+ * Called once per component lifecycle to ensure single instance.
+ * Uses environment variables: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
+ * 
+ * @returns {SupabaseClient} Configured Supabase client
+ */
 const createSupabaseClient = () => createClientComponentClient();
 
+/**
+ * Custom App Component
+ * 
+ * All pages in the application are wrapped by this component.
+ * Provides Supabase session context for authentication.
+ * 
+ * @param {Object} props
+ * @param {React.ComponentType} props.Component - The active page component
+ * @param {Object} props.pageProps - Props passed from getServerSideProps/getStaticProps
+ * @returns {JSX.Element}
+ */
 function MyApp({ Component, pageProps }) {
-  // Create or retrieve the client instance using useState
+  // Create Supabase client once and persist across re-renders
+  // Using useState ensures the client is created only once
   const [supabaseClient] = useState(createSupabaseClient);
 
-  // Always wrap with SessionContextProvider so useSupabaseClient hook works
+  // SessionContextProvider makes session available via useSession() hook
+  // initialSession from getInitialProps enables SSR auth
   return (
     <SessionContextProvider
       supabaseClient={supabaseClient}
@@ -32,6 +63,7 @@ function MyApp({ Component, pageProps }) {
     </SessionContextProvider>
   );
 }
+
 
 // 🔑 DEFINITIVE FIX: Create the client locally inside getInitialProps 
 // to ensure it correctly parses the server-side cookies (req/res).

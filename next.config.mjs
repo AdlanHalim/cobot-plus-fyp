@@ -1,5 +1,17 @@
+/**
+ * @file next.config.mjs
+ * @location cobot-plus-fyp/next.config.mjs
+ * 
+ * @description
+ * Next.js configuration file for the CObot+ Attendance System.
+ * Configures image optimization, security headers, and compression.
+ * 
+ * @see https://nextjs.org/docs/app/api-reference/next-config-js
+ */
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Enable React Strict Mode for development-time checks
   reactStrictMode: true,
 
   // Image optimization

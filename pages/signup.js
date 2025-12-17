@@ -1,3 +1,21 @@
+/**
+ * @file signup.js
+ * @location cobot-plus-fyp/pages/signup.js
+ * 
+ * @description
+ * User registration page for the CObot+ Attendance System.
+ * Handles new account creation via Supabase Auth.
+ * 
+ * Features:
+ * - Collects: Full Name, Matric No, Email, Password
+ * - Auto-links to existing student record if matric number matches
+ * - Sets role to "student" when linked to student record
+ * - Email confirmation workflow (if not auto-confirmed)
+ * - Split-screen design matching login page
+ * 
+ * @access Public (no authentication required)
+ */
+
 import { useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
@@ -6,6 +24,10 @@ import { useSupabaseClient } from "@supabase/auth-helpers-react";
 import { motion } from "framer-motion";
 import { Mail, Lock, User, Hash, ArrowRight } from "lucide-react";
 
+/**
+ * Sign Up Page Component
+ * Renders the registration form with student information inputs.
+ */
 export default function SignUpPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

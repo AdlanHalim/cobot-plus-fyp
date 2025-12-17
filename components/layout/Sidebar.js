@@ -1,3 +1,20 @@
+/**
+ * @file Sidebar.js
+ * @location cobot-plus-fyp/components/layout/Sidebar.js
+ * 
+ * @description
+ * Collapsible sidebar navigation component for the CObot+ dashboard.
+ * Displays navigation links filtered by user role.
+ * 
+ * Features:
+ * - Collapsible on desktop (click toggle button)
+ * - Mobile hamburger menu with slide-out panel
+ * - Role-based menu item visibility
+ * - User profile display (name, role, avatar)
+ * - Active route highlighting
+ * - Logout functionality
+ */
+
 import { useRouter } from "next/router";
 import Link from "next/link";
 import { useState, useEffect } from "react";
@@ -17,6 +34,10 @@ import {
     Menu,
 } from "lucide-react";
 
+/**
+ * Sidebar Navigation Component
+ * Fetches user profile and renders role-appropriate navigation links.
+ */
 const Sidebar = () => {
     const router = useRouter();
     const [isCollapsed, setIsCollapsed] = useState(false);

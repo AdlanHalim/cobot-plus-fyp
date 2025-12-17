@@ -1,3 +1,12 @@
+/**
+ * @file useSectionManagement.js
+ * @location cobot-plus-fyp/hooks/useSectionManagement.js
+ * 
+ * @description
+ * Custom hook for section and course management with CRUD operations.
+ * Handles section visibility toggles for analytics filtering.
+ */
+
 import { useState, useEffect, useCallback } from "react";
 import { useSupabaseClient } from "@supabase/auth-helpers-react";
 import { toast } from "react-toastify";

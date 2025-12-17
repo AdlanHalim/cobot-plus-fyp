@@ -1,4 +1,7 @@
 """
+@file app_optimized.py
+@location cobot-plus-fyp/raspberry-pi/app_optimized.py
+
 CObot+ Face Recognition Attendance System - Automatic Mode
 ==========================================================
 Raspberry Pi Flask server for face recognition attendance tracking.
@@ -7,6 +10,14 @@ Features:
 - 24/7 automatic attendance based on section_schedules
 - Automatic present/late detection based on arrival time
 - Window: start -15min, late +15min after start, stop at end -15min
+
+API Endpoints:
+- GET  /video                 : MJPEG video stream
+- GET  /health                : System status
+- GET  /api/current-class     : Current attendance window info
+- GET  /api/attendance-records: Today's attendance for current section
+- POST /upload-image          : Register new face
+- POST /api/reconnect         : Reload faces and clear cache
 """
 
 import os

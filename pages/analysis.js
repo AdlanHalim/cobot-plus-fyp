@@ -1,3 +1,24 @@
+/**
+ * @file analysis.js
+ * @location cobot-plus-fyp/pages/analysis.js
+ * 
+ * @description
+ * Attendance Analytics Dashboard for the CObot+ Attendance System.
+ * Provides comprehensive attendance metrics, charts, and intervention tools.
+ * 
+ * Features:
+ * - KPI Cards: Average Attendance, Punctuality Score, Enrollment, Weekly Trend
+ * - Attendance Trend Line Chart with goal line (80%)
+ * - At-Risk Bar Chart showing 3+ and 6+ absence counts
+ * - Warning List: Students with 3 absences (send warning button)
+ * - Barring List: Students with 6+ absences (send barring notice)
+ * - Status Breakdown Pie Chart (Present/Late/Absent)
+ * - Chronic Late Arrivers List
+ * - CSV and PDF export functionality
+ * 
+ * @access Admin, Lecturer (protected by withRole HOC)
+ */
+
 "use client";
 
 import React, { useState } from "react";
@@ -10,6 +31,9 @@ import { useSupabaseClient } from "@supabase/auth-helpers-react";
 import withRole from "../utils/withRole";
 import { useUserRole, useAttendanceData } from "@/hooks";
 import { generateAndDownloadReport } from "../utils/generateReport";
+
+// Lazy load recharts components to reduce initial bundle size
+// This improves page load performance by code-splitting heavy charting libraries
 
 // Lazy load recharts components to reduce initial bundle size
 const LineChart = dynamic(() => import("recharts").then((mod) => mod.LineChart), { ssr: false });

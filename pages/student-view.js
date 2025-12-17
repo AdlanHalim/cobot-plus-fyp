@@ -1,3 +1,22 @@
+/**
+ * @file student-view.js
+ * @location cobot-plus-fyp/pages/student-view.js
+ * 
+ * @description
+ * Student attendance records viewer for the CObot+ Attendance System.
+ * Shows personal attendance history and allows excuse submissions.
+ * 
+ * Features:
+ * - Auto-load attendance for logged-in students
+ * - Admin search by matric number
+ * - Stats cards: Total Classes, Present, Late, Absent
+ * - Tab views: Calendar, Details Table, My Excuses
+ * - In-line excuse submission for absent records
+ * - Document upload for excuse evidence
+ * 
+ * @access Admin, Student (protected by withRole HOC)
+ */
+
 "use client";
 
 import React, { useState } from "react";
@@ -14,6 +33,8 @@ import { useStudentSearch, useExcuseManagement, useUserRole } from "@/hooks";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import withRole from "../utils/withRole";
+
+// Available excuse types for the submission form
 
 const EXCUSE_TYPES = [
   { value: "medical", label: "Medical (MC)", icon: "🏥" },

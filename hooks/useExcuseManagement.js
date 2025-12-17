@@ -1,3 +1,12 @@
+/**
+ * @file useExcuseManagement.js
+ * @location cobot-plus-fyp/hooks/useExcuseManagement.js
+ * 
+ * @description
+ * Custom hook for managing excuse submissions and reviews.
+ * Handles student excuse creation, document uploads, and admin/lecturer approval workflow.
+ */
+
 import { useState, useEffect, useCallback } from "react";
 import { useSupabaseClient, useSession } from "@supabase/auth-helpers-react";
 

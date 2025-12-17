@@ -1,3 +1,12 @@
+/**
+ * @file useDashboardData.js
+ * @location cobot-plus-fyp/hooks/useDashboardData.js
+ * 
+ * @description
+ * Custom hook for fetching real-time dashboard data from the Raspberry Pi backend.
+ * Implements smart polling with tab visibility detection to optimize bandwidth.
+ */
+
 import { useState, useEffect, useCallback, useRef } from "react";
 
 /**

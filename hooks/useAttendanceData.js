@@ -1,3 +1,12 @@
+/**
+ * @file useAttendanceData.js
+ * @location cobot-plus-fyp/hooks/useAttendanceData.js
+ * 
+ * @description
+ * Custom hook for fetching and processing attendance analytics data.
+ * Includes late tracking, punctuality metrics, and at-risk student detection.
+ */
+
 import { useState, useEffect, useCallback } from "react";
 import { useSupabaseClient } from "@supabase/auth-helpers-react";
 

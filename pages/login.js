@@ -1,3 +1,22 @@
+/**
+ * @file login.js
+ * @location cobot-plus-fyp/pages/login.js
+ * 
+ * @description
+ * User authentication page for the CObot+ Attendance System.
+ * Handles email/password login via Supabase Auth.
+ * 
+ * Features:
+ * - Email and password validation
+ * - Role-based redirect after login:
+ *   - Students → /student-view
+ *   - Admin/Lecturer → / (dashboard)
+ * - Split-screen design with CObot+ branding
+ * - Error message display
+ * 
+ * @access Public (no authentication required)
+ */
+
 import { useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
@@ -6,6 +25,10 @@ import { useSupabaseClient } from "@supabase/auth-helpers-react";
 import { motion } from "framer-motion";
 import { Mail, Lock, ArrowRight } from "lucide-react";
 
+/**
+ * Login Page Component
+ * Renders the authentication form with email/password inputs.
+ */
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

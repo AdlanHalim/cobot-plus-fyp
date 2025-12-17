@@ -1,9 +1,30 @@
+/**
+ * @file unauthorized.js
+ * @location cobot-plus-fyp/pages/unauthorized.js
+ * 
+ * @description
+ * Access denied page displayed when user lacks permission for a route.
+ * Shown when role check fails in withRole HOC.
+ * 
+ * Features:
+ * - Lock icon and access denied message
+ * - Role-aware redirect button:
+ *   - Students → /student-view
+ *   - Admin/Lecturer → / (dashboard)
+ * 
+ * @access All authenticated users
+ */
+
 "use client";
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useSupabaseClient, useSession } from '@supabase/auth-helpers-react';
 import { LockClosedIcon } from '@heroicons/react/24/outline';
 
+/**
+ * Unauthorized Page Component
+ * Determines appropriate redirect path based on user role.
+ */
 export default function UnauthorizedPage() {
   const router = useRouter();
   const supabase = useSupabaseClient();

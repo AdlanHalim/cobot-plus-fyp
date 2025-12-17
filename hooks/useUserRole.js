@@ -1,3 +1,12 @@
+/**
+ * @file useUserRole.js
+ * @location cobot-plus-fyp/hooks/useUserRole.js
+ * 
+ * @description
+ * Custom hook for determining user role and lecturer ID from Supabase profiles.
+ * Used for role-based data filtering and access control in dashboard components.
+ */
+
 import { useState, useEffect } from "react";
 import { useSession, useSupabaseClient } from "@supabase/auth-helpers-react";
 

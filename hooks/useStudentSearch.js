@@ -1,3 +1,12 @@
+/**
+ * @file useStudentSearch.js
+ * @location cobot-plus-fyp/hooks/useStudentSearch.js
+ * 
+ * @description
+ * Custom hook for searching students and retrieving attendance records.
+ * Supports both manual search (admin) and auto-load mode (logged-in student).
+ */
+
 import { useState, useCallback, useEffect } from "react";
 import { useSupabaseClient, useSession } from "@supabase/auth-helpers-react";
 

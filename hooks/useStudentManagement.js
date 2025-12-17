@@ -1,3 +1,12 @@
+/**
+ * @file useStudentManagement.js
+ * @location cobot-plus-fyp/hooks/useStudentManagement.js
+ * 
+ * @description
+ * Custom hook for student management including CRUD operations and section enrollments.
+ * Used in admin pages for managing student records.
+ */
+
 import { useState, useEffect, useCallback } from "react";
 import { useSupabaseClient } from "@supabase/auth-helpers-react";
 import { toast } from "react-toastify";

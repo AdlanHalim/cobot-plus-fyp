@@ -1,3 +1,12 @@
+/**
+ * @file useClassSession.js
+ * @location cobot-plus-fyp/hooks/useClassSession.js
+ * 
+ * @description
+ * Custom hook for managing class session lifecycle (start/end).
+ * Integrates with Raspberry Pi backend for attendance tracking control.
+ */
+
 import { useState, useEffect, useCallback } from "react";
 import { useSupabaseClient } from "@supabase/auth-helpers-react";
 

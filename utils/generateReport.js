@@ -1,10 +1,55 @@
+/**
+ * @file generateReport.js
+ * @location cobot-plus-fyp/utils/generateReport.js
+ * 
+ * @description
+ * PDF report generation utilities for the CObot+ Attendance System.
+ * Uses jsPDF and jspdf-autotable to create formatted attendance reports
+ * with CObot+ branding, summary statistics, and detailed student tables.
+ * 
+ * @example
+ * // Generate and download a report
+ * import { generateAndDownloadReport } from "@/utils/generateReport";
+ * 
+ * generateAndDownloadReport({
+ *   title: "Weekly Attendance Report",
+ *   sectionName: "Section A",
+ *   courseName: "Introduction to Programming",
+ *   dateRange: "Dec 1-7, 2024",
+ *   summary: { totalStudents: 30, averageAttendance: 85 },
+ *   students: [{ matric_no: "A123", name: "John", present: 5, absent: 1 }],
+ *   fileName: "week1_report.pdf"
+ * });
+ */
+
 import { jsPDF } from "jspdf";
-import "jspdf-autotable";
+import "jspdf-autotable"; // Extends jsPDF with autoTable method
 
 /**
- * Generate a PDF attendance report
- * @param {Object} options Report options
- * @returns {jsPDF} PDF document
+ * Generate a PDF attendance report document.
+ * 
+ * Creates a professionally formatted PDF with:
+ * - CObot+ branded header
+ * - Course and section information
+ * - Date range and generation timestamp
+ * - Summary statistics box
+ * - Student attendance table with Present/Absent/Late columns
+ * - Page numbers in footer
+ * 
+ * @param {Object} options - Report configuration options
+ * @param {string} [options.title="Attendance Report"] - Report title
+ * @param {string} [options.sectionName=""] - Section name (e.g., "Section A")
+ * @param {string} [options.courseName=""] - Course name
+ * @param {string} [options.dateRange=""] - Date range for the report
+ * @param {Object} [options.summary={}] - Summary statistics
+ * @param {number} [options.summary.totalStudents] - Total enrolled students
+ * @param {number} [options.summary.averageAttendance] - Average attendance %
+ * @param {number} [options.summary.totalClasses] - Number of classes
+ * @param {number} [options.summary.atRisk] - Students at risk count
+ * @param {Array<Object>} [options.students=[]] - Student attendance data
+ * @param {string} [options.fileName="attendance_report.pdf"] - Output filename
+ * 
+ * @returns {{doc: jsPDF, fileName: string}} PDF document and filename
  */
 export function generateAttendanceReport({
     title = "Attendance Report",
