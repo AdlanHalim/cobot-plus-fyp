@@ -77,7 +77,7 @@ const Sidebar = () => {
         { href: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["student", "lecturer", "admin"] },
         { href: "/add-student1", label: "Add Student", icon: UserPlus, roles: ["lecturer", "admin"] },
         { href: "/manage-student", label: "Students", icon: Users, roles: ["admin"] },
-        { href: "/manage-course", label: "Courses", icon: BookOpen, roles: ["admin"] },
+        { href: "/manage-course", label: "Course Hub", icon: BookOpen, roles: ["admin"] },
         { href: "/analysis", label: "Analysis", icon: BarChart3, roles: ["student", "lecturer", "admin"] },
         { href: "/student-view", label: "My Records", icon: FileText, roles: ["admin", "student"] },
         { href: "/submit-excuse", label: "Submit Excuse", icon: FileText, roles: ["student"] },

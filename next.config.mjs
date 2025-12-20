@@ -4,7 +4,7 @@
  * 
  * @description
  * Next.js configuration file for the CObot+ Attendance System.
- * Configures image optimization, security headers, and compression.
+ * Configures image optimization, security headers, compression, and performance.
  * 
  * @see https://nextjs.org/docs/app/api-reference/next-config-js
  */
@@ -13,6 +13,9 @@
 const nextConfig = {
   // Enable React Strict Mode for development-time checks
   reactStrictMode: true,
+
+  // Enable SWC minification for faster builds
+  swcMinify: true,
 
   // Image optimization
   images: {
@@ -23,6 +26,19 @@ const nextConfig = {
       },
     ],
     formats: ['image/avif', 'image/webp'],
+  },
+
+  // Optimize package imports - tree-shake lucide-react icons
+  modularizeImports: {
+    'lucide-react': {
+      transform: 'lucide-react/dist/esm/icons/{{kebabCase member}}',
+    },
+  },
+
+  // Experimental optimizations
+  experimental: {
+    // Optimize package imports
+    optimizePackageImports: ['lucide-react', 'recharts', 'framer-motion'],
   },
 
   // Security headers
@@ -54,6 +70,9 @@ const nextConfig = {
 
   // Compression
   compress: true,
+
+  // PoweredBy header removal
+  poweredByHeader: false,
 };
 
 export default nextConfig;
