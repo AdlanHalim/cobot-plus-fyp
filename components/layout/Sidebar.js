@@ -74,13 +74,12 @@ const Sidebar = () => {
     const userRole = profile?.role || "student";
 
     const navItems = [
-        { href: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["student", "lecturer", "admin"] },
+        { href: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["lecturer", "admin"] },
         { href: "/add-student1", label: "Add Student", icon: UserPlus, roles: ["lecturer", "admin"] },
         { href: "/manage-student", label: "Students", icon: Users, roles: ["admin"] },
         { href: "/manage-course", label: "Course Hub", icon: BookOpen, roles: ["admin"] },
-        { href: "/analysis", label: "Analysis", icon: BarChart3, roles: ["student", "lecturer", "admin"] },
+        { href: "/analysis", label: "Analysis", icon: BarChart3, roles: ["lecturer", "admin"] },
         { href: "/student-view", label: "My Records", icon: FileText, roles: ["admin", "student"] },
-        { href: "/submit-excuse", label: "Submit Excuse", icon: FileText, roles: ["student"] },
         { href: "/manage-excuses", label: "Excuses", icon: FileText, roles: ["admin", "lecturer"] },
         { href: "/manage-roles", label: "User Roles", icon: UserCog, roles: ["admin"] },
         { href: "/settings", label: "Settings", icon: Settings, roles: ["admin"] },

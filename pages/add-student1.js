@@ -8,12 +8,19 @@ import { motion } from "framer-motion";
 import withRole from "../utils/withRole"; // Import the HOC for role access control
 
 function AddStudent() {
+  const supabase = useSupabaseClient();
+
   const [formData, setFormData] = useState({
     matricNo: "",
     fullName: "",
     nickname: "",
     email: "",
   });
+
+  // Class enrollment state
+  const [sections, setSections] = useState([]);
+  const [selectedClasses, setSelectedClasses] = useState([]);
+  const [sectionsLoading, setSectionsLoading] = useState(true);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState("");
@@ -26,7 +33,31 @@ function AddStudent() {
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
-  const supabase = useSupabaseClient();
+  const pathInputRef = useRef(null);
+
+  // Fetch sections on mount
+  useEffect(() => {
+    const fetchSections = async () => {
+      const { data, error } = await supabase
+        .from("sections")
+        .select("id, name, courses(code, name)")
+        .order("name");
+
+      if (data) setSections(data);
+      if (error) console.error("Error fetching sections:", error);
+      setSectionsLoading(false);
+    };
+    fetchSections();
+  }, [supabase]);
+
+  // Toggle class selection
+  const toggleClassSelection = (sectionId) => {
+    setSelectedClasses(prev =>
+      prev.includes(sectionId)
+        ? prev.filter(id => id !== sectionId)
+        : [...prev, sectionId]
+    );
+  };
 
   // Handle Form Change
   const handleChange = (e) =>
@@ -74,7 +105,6 @@ function AddStudent() {
     setCapturedImage(null);
     if (pathInputRef.current) pathInputRef.current.value = "";
   };
-  const pathInputRef = useRef(null);
 
 
   // Camera Logic
@@ -178,9 +208,33 @@ function AddStudent() {
 
       if (dbError) throw dbError;
 
-      setMessage("✅ Student registered successfully!");
-      setError(false);
+      // 3. Auto-enroll in selected classes
+      if (selectedClasses.length > 0) {
+        const enrollments = selectedClasses.map(sectionId => ({
+          student_id: matricNo,
+          section_id: sectionId,
+        }));
+
+        const { error: enrollError } = await supabase
+          .from("section_students")
+          .upsert(enrollments, { onConflict: "student_id,section_id" });
+
+        if (enrollError) {
+          console.error("Enrollment error:", enrollError);
+          // Don't fail the whole operation, just warn
+          setMessage(`✅ Student registered! ⚠️ Some enrollments may have failed.`);
+          setError(false);
+        } else {
+          setMessage(`✅ Student registered and enrolled in ${selectedClasses.length} class(es)!`);
+          setError(false);
+        }
+      } else {
+        setMessage("✅ Student registered successfully!");
+        setError(false);
+      }
+
       setFormData({ matricNo: "", fullName: "", nickname: "", email: "" });
+      setSelectedClasses([]);
       setCapturedImage(null);
       setImage(null);
       setShowCamera(false);
@@ -264,6 +318,48 @@ function AddStudent() {
                   className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 outline-none transition"
                   required
                 />
+              </div>
+
+              {/* Class Enrollment Section */}
+              <div className="pt-2">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Enroll in Classes (Optional)
+                  {selectedClasses.length > 0 && (
+                    <span className="ml-2 px-2 py-0.5 bg-teal-100 text-teal-700 rounded-full text-xs">
+                      {selectedClasses.length} selected
+                    </span>
+                  )}
+                </label>
+                {sectionsLoading ? (
+                  <div className="text-sm text-slate-500">Loading classes...</div>
+                ) : sections.length === 0 ? (
+                  <div className="text-sm text-slate-500 italic">No classes available</div>
+                ) : (
+                  <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
+                    {sections.map((section) => (
+                      <label
+                        key={section.id}
+                        className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-slate-50 transition ${selectedClasses.includes(section.id) ? "bg-teal-50" : ""
+                          }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedClasses.includes(section.id)}
+                          onChange={() => toggleClassSelection(section.id)}
+                          className="w-4 h-4 rounded border-slate-300 text-teal-500 focus:ring-teal-500"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-800">
+                            {section.courses?.code || "N/A"} - {section.name}
+                          </p>
+                          <p className="text-xs text-slate-500 truncate">
+                            {section.courses?.name || ""}
+                          </p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
             </form>
           </motion.div>

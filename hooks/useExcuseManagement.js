@@ -96,7 +96,7 @@ export function useExcuseManagement(options = {}) {
                         lecturer_id,
                         courses (code, name)
                     ),
-                    class_sessions (class_date)
+                    class_sessions (id, class_date)
                 `)
                 .order("created_at", { ascending: false });
 
@@ -160,7 +160,6 @@ export function useExcuseManagement(options = {}) {
         }
     }, [fetchExcuses, fetchSections, studentId, isAdmin, isLecturer, lecturerSections]);
 
-    // Submit new excuse
     const submitExcuse = useCallback(
         async ({ sectionId, excuseType, reason, documentUrl = null, classSessionId = null }) => {
             if (!supabase || !studentId) {
@@ -215,15 +214,28 @@ export function useExcuseManagement(options = {}) {
 
                 if (updateError) throw updateError;
 
-                // If approved, update attendance record to excused
+                // If approved, update the specific attendance record to excused
                 if (status === "approved") {
                     const excuse = excuses.find((e) => e.id === excuseId);
+                    console.log("[Excuse Approval] Found excuse:", excuse);
+
                     if (excuse?.class_session_id) {
-                        await supabase
+                        console.log(`[Excuse Approval] Updating attendance for student: ${excuse.student_id}, session: ${excuse.class_session_id}`);
+
+                        const { data: updateData, error: attendanceError } = await supabase
                             .from("attendance_records")
                             .update({ status: "excused" })
                             .eq("student_id", excuse.student_id)
-                            .eq("class_session_id", excuse.class_session_id);
+                            .eq("class_session_id", excuse.class_session_id)
+                            .select();
+
+                        if (attendanceError) {
+                            console.error("[Excuse Approval] Failed to update attendance:", attendanceError);
+                        } else {
+                            console.log("[Excuse Approval] Attendance updated:", updateData);
+                        }
+                    } else {
+                        console.warn("[Excuse Approval] No class_session_id on excuse - attendance not updated");
                     }
                 }
 

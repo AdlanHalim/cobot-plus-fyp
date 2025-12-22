@@ -62,10 +62,24 @@ function AttendanceDashboard() {
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-  const [filters, setFilters] = useState({
-    section: "",
-    month: currentMonth,
+  // Initialize filters from localStorage or defaults
+  const [filters, setFilters] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('analysis-filters');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          // Use saved section, default month to "" (all data)
+          return { section: parsed.section || "", month: "" };
+        } catch {
+          return { section: "", month: "" };
+        }
+      }
+    }
+    return { section: "", month: "" };
   });
+
+  const [filtersInitialized, setFiltersInitialized] = useState(false);
 
   const {
     attendanceData,
@@ -86,6 +100,28 @@ function AttendanceDashboard() {
     setAbsenceStatusData,
     availableMonths,
   } = useAttendanceData({ filters, lecturerId, userRole });
+
+  // Auto-select first section when sections load (for lecturers)
+  React.useEffect(() => {
+    if (sections.length > 0 && !filtersInitialized) {
+      // Check if saved section still exists
+      const savedSection = filters.section;
+      const sectionExists = sections.some(s => s.id === savedSection);
+
+      if (!sectionExists) {
+        // Auto-select first section
+        setFilters(f => ({ ...f, section: sections[0].id }));
+      }
+      setFiltersInitialized(true);
+    }
+  }, [sections, filtersInitialized, filters.section]);
+
+  // Persist filter changes to localStorage
+  React.useEffect(() => {
+    if (filters.section && typeof window !== 'undefined') {
+      localStorage.setItem('analysis-filters', JSON.stringify({ section: filters.section }));
+    }
+  }, [filters.section]);
 
   // Get selected month label for display
   const selectedMonthLabel = availableMonths?.find(m => m.value === filters.month)?.label || 'This Month';
@@ -267,8 +303,30 @@ function AttendanceDashboard() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-800">Attendance Analysis</h1>
-            <p className="text-slate-500 text-sm">Real-time performance metrics and risk monitoring</p>
+            <p className="text-slate-500 text-sm">
+              {filters.section
+                ? `Viewing: ${sections.find(s => s.id === filters.section)?.name || 'Selected Section'}`
+                : 'Real-time performance metrics and risk monitoring'}
+            </p>
           </div>
+
+          {/* Quick Section Pills */}
+          {sections.length > 1 && (
+            <div className="flex flex-wrap gap-2">
+              {sections.slice(0, 5).map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setFilters({ ...filters, section: s.id })}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filters.section === s.id
+                    ? 'bg-teal-500 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                >
+                  {s.name.split(' - ')[0]}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Filters & Actions Bar */}
           <div className="flex flex-wrap items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm">
@@ -287,6 +345,7 @@ function AttendanceDashboard() {
               value={filters.month}
               onChange={(e) => setFilters({ ...filters, month: e.target.value })}
             >
+              <option value="">All Time</option>
               {availableMonths?.map((m) => (
                 <option key={m.value} value={m.value}>{m.label}</option>
               ))}
