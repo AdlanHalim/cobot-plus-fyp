@@ -27,6 +27,10 @@ export { useStudentManagement } from "./useStudentManagement"; // CRUD for stude
 
 // Course & Section Operations
 export { useSectionManagement } from "./useSectionManagement"; // CRUD for sections and courses
+export { useCourseManagement } from "./useCourseManagement";   // CRUD for courses
+export { useLecturerManagement } from "./useLecturerManagement"; // CRUD for lecturers
+export { useScheduleManagement } from "./useScheduleManagement"; // CRUD for section schedules
+export { useEnrollmentManagement } from "./useEnrollmentManagement"; // Bulk enrollment via CSV
 
 // Real-time Dashboard
 export { useDashboardData } from "./useDashboardData"; // Poll Raspberry Pi for live attendance
@@ -36,3 +40,6 @@ export { useClassSession } from "./useClassSession";   // Start/end class sessio
 
 // Excuse Management
 export { useExcuseManagement } from "./useExcuseManagement"; // Submit and review excuses
+
+// Utilities
+export { useDebounce } from "./useDebounce"; // Debounce values for performance

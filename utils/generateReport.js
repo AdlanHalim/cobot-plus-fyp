@@ -23,7 +23,7 @@
  */
 
 import { jsPDF } from "jspdf";
-import "jspdf-autotable"; // Extends jsPDF with autoTable method
+import autoTable from "jspdf-autotable";
 
 /**
  * Generate a PDF attendance report document.
@@ -128,16 +128,17 @@ export function generateAttendanceReport({
             s.absent || 0,
             s.late || 0,
             `${s.percentage || 0}%`,
+            s.status || "Good",
         ]);
 
-        doc.autoTable({
+        autoTable(doc, {
             startY: yPos + 5,
-            head: [["#", "Matric No", "Name", "Present", "Absent", "Late", "Attendance %"]],
+            head: [["#", "Matric No", "Name", "Present", "Absent", "Late", "%", "Status"]],
             body: tableData,
             theme: "striped",
             styles: {
-                fontSize: 9,
-                cellPadding: 3,
+                fontSize: 8,
+                cellPadding: 2,
             },
             headStyles: {
                 fillColor: [79, 70, 229], // Indigo
@@ -148,14 +149,32 @@ export function generateAttendanceReport({
                 fillColor: [241, 245, 249], // Slate-100
             },
             columnStyles: {
-                0: { cellWidth: 10 },
-                1: { cellWidth: 25 },
-                2: { cellWidth: 45 },
-                3: { cellWidth: 18, halign: "center" },
-                4: { cellWidth: 18, halign: "center" },
-                5: { cellWidth: 15, halign: "center" },
-                6: { cellWidth: 25, halign: "center" },
+                0: { cellWidth: 8 },
+                1: { cellWidth: 22 },
+                2: { cellWidth: 40 },
+                3: { cellWidth: 15, halign: "center" },
+                4: { cellWidth: 15, halign: "center" },
+                5: { cellWidth: 12, halign: "center" },
+                6: { cellWidth: 15, halign: "center" },
+                7: { cellWidth: 22, halign: "center" },
             },
+            didParseCell: function (data) {
+                // Color code status column
+                if (data.column.index === 7 && data.section === 'body') {
+                    const status = data.cell.raw;
+                    if (status === "Barred") {
+                        data.cell.styles.textColor = [220, 38, 38]; // Red
+                        data.cell.styles.fontStyle = 'bold';
+                    } else if (status === "Warning") {
+                        data.cell.styles.textColor = [234, 88, 12]; // Orange
+                        data.cell.styles.fontStyle = 'bold';
+                    } else if (status === "Chronic Late") {
+                        data.cell.styles.textColor = [245, 158, 11]; // Amber
+                    } else {
+                        data.cell.styles.textColor = [22, 163, 74]; // Green
+                    }
+                }
+            }
         });
     }
 

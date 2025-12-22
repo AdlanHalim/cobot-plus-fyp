@@ -30,7 +30,7 @@ import { Download, Mail, Users, BarChart2, TrendingUp, AlertTriangle, XCircle, C
 import { useSupabaseClient } from "@supabase/auth-helpers-react";
 import withRole from "../utils/withRole";
 import { useUserRole, useAttendanceData } from "@/hooks";
-import { generateAndDownloadReport } from "../utils/generateReport";
+// PDF generation is dynamically imported when needed to reduce initial bundle
 
 // Lazy load recharts components to reduce initial bundle size
 // This improves page load performance by code-splitting heavy charting libraries
@@ -58,9 +58,13 @@ function AttendanceDashboard() {
   // Use custom hooks for data fetching
   const { userRole, lecturerId, isLoading: userLoading } = useUserRole();
 
+  // Get current month as default
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
   const [filters, setFilters] = useState({
     section: "",
-    period: "month",
+    month: currentMonth,
   });
 
   const {
@@ -75,11 +79,16 @@ function AttendanceDashboard() {
     absent3,
     absent6,
     absenceStatusData,
+    allStudentsReport,
     isLoading: dataLoading,
     setAbsent3,
     setAbsent6,
     setAbsenceStatusData,
+    availableMonths,
   } = useAttendanceData({ filters, lecturerId, userRole });
+
+  // Get selected month label for display
+  const selectedMonthLabel = availableMonths?.find(m => m.value === filters.month)?.label || 'This Month';
 
   // Handle sending email notifications
   const handleSendEmail = async (student, absenceCount) => {
@@ -134,45 +143,68 @@ function AttendanceDashboard() {
   };
 
   const handleExportCSV = () => {
-    const headers = "Week,Attendance Percentage\n";
-    const rows = attendanceData.map((row) => `${row.week},${row.attendance}`).join("\n");
-    const csv = headers + rows;
+    const selectedSection = sections.find((s) => s.id === filters.section);
+    const sectionName = selectedSection?.name || "All Sections";
+
+    // Build comprehensive CSV
+    let csv = `Monthly Attendance Report - ${selectedMonthLabel}\n`;
+    csv += `Section: ${sectionName}\n`;
+    csv += `Generated: ${new Date().toLocaleString()}\n\n`;
+
+    // Summary section
+    csv += `SUMMARY\n`;
+    csv += `Total Students,${totalStudents}\n`;
+    csv += `Average Attendance,${averageAttendance}%\n`;
+    csv += `Punctuality Score,${punctualityScore}%\n`;
+    csv += `Total Present,${statusBreakdown.present}\n`;
+    csv += `Total Late,${statusBreakdown.late}\n`;
+    csv += `Total Absent,${statusBreakdown.absent}\n`;
+    csv += `Students at Warning (3+),${absent3.length}\n`;
+    csv += `Students Barred (6+),${absent6.length}\n\n`;
+
+    // Weekly trend
+    csv += `WEEKLY TREND\n`;
+    csv += `Week,Attendance %,Present,Late\n`;
+    attendanceData.forEach((row) => {
+      csv += `${row.week},${row.attendance}%,${row.present},${row.late}\n`;
+    });
+    csv += `\n`;
+
+    // Student details
+    csv += `STUDENT DETAILS\n`;
+    csv += `Matric No,Name,Present,Late,Absent,Attendance %,Status\n`;
+    allStudentsReport.forEach((s) => {
+      csv += `${s.matric_no},${s.name},${s.present},${s.late},${s.absent},${s.percentage}%,${s.status}\n`;
+    });
 
     const blob = new Blob([csv], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
 
     const a = document.createElement("a");
     a.href = url;
-    a.download = "attendance_report.csv";
+    a.download = `attendance_report_${selectedMonthLabel.replace(/ /g, '_')}.csv`;
     a.click();
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
+    // Dynamic import - only load PDF library when needed
+    const { generateAndDownloadReport } = await import("../utils/generateReport");
+
     const selectedSection = sections.find((s) => s.id === filters.section);
 
-    // Prepare student data from absent3 and absent6 lists
-    const allStudentsAtRisk = [...absent3, ...absent6].map((s) => ({
-      matric_no: s.matric_no || "-",
-      name: s.name,
-      present: 0,
-      absent: s.absences || 0,
-      late: 0,
-      percentage: Math.max(0, 100 - (s.absences || 0) * 10),
-    }));
-
     generateAndDownloadReport({
-      title: "Attendance Analysis Report",
+      title: `Monthly Attendance Report`,
       sectionName: selectedSection?.name || "All Sections",
       courseName: selectedSection?.courses?.name || "",
-      dateRange: filters.period === "month" ? "Last 30 Days" : "This Semester",
+      dateRange: selectedMonthLabel,
       summary: {
         totalStudents: totalStudents || 0,
         averageAttendance: averageAttendance || 0,
-        totalClasses: attendanceData.length || 0,
+        totalClasses: attendanceData.reduce((sum, w) => sum + w.present + w.late, 0),
         atRisk: absent3.length + absent6.length,
       },
-      students: allStudentsAtRisk,
-      fileName: `attendance_report_${new Date().toISOString().split("T")[0]}.pdf`,
+      students: allStudentsReport,
+      fileName: `attendance_report_${selectedMonthLabel.replace(/ /g, '_')}.pdf`,
     });
   };
 
@@ -242,11 +274,21 @@ function AttendanceDashboard() {
           <div className="flex flex-wrap items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm">
             <select
               className="px-3 py-2 rounded-lg border-0 bg-slate-50 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-teal-500 outline-none hover:bg-slate-100 transition min-w-[180px]"
+              value={filters.section}
               onChange={(e) => setFilters({ ...filters, section: e.target.value })}
             >
               <option value="">All Sections</option>
               {sections.map((s) => (
-                <option key={s.id} value={s.id}>{s.name} ({s.courses?.code})</option>
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+            <select
+              className="px-3 py-2 rounded-lg border-0 bg-slate-50 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-teal-500 outline-none hover:bg-slate-100 transition min-w-[150px]"
+              value={filters.month}
+              onChange={(e) => setFilters({ ...filters, month: e.target.value })}
+            >
+              {availableMonths?.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
               ))}
             </select>
             <div className="h-6 w-px bg-slate-200 mx-1"></div>
@@ -332,7 +374,16 @@ function AttendanceDashboard() {
           {/* Left: Trend Line Chart */}
           <Card className="lg:col-span-2 bg-white shadow-sm border border-slate-100">
             <CardHeader className="pb-2 border-b border-slate-50">
-              <CardTitle className="text-base font-semibold text-slate-800">Attendance Trend</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base font-semibold text-slate-800">
+                  Attendance Trend - {selectedMonthLabel}
+                </CardTitle>
+                {attendanceData.some(d => d.isPartial) && (
+                  <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-lg">
+                    * Current week (in progress)
+                  </span>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="p-6">
               <div className="h-[300px] w-full">
