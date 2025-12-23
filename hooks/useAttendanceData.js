@@ -84,24 +84,21 @@ export function useAttendanceData({ filters, lecturerId, userRole }) {
         try {
             const isLecturerFilterNeeded = userRole === "lecturer" && lecturerId;
 
-            // Parse selected month (default to current month)
+            // Parse selected month (empty = all time)
             const now = new Date();
-            let selectedYear = now.getFullYear();
-            let selectedMonth = now.getMonth(); // 0-indexed
+            let monthStart = null;
+            let monthEnd = null;
+            let isAllTime = !filters.month;
+            let isCurrentMonth = false;
 
             if (filters.month) {
                 const [year, month] = filters.month.split('-').map(Number);
-                selectedYear = year;
-                selectedMonth = month - 1; // Convert to 0-indexed
+                const selectedYear = year;
+                const selectedMonth = month - 1; // Convert to 0-indexed
+                monthStart = new Date(selectedYear, selectedMonth, 1);
+                monthEnd = new Date(selectedYear, selectedMonth + 1, 0); // Last day of month
+                isCurrentMonth = selectedYear === now.getFullYear() && selectedMonth === now.getMonth();
             }
-
-            const monthStart = new Date(selectedYear, selectedMonth, 1);
-            const monthEnd = new Date(selectedYear, selectedMonth + 1, 0); // Last day of month
-            const isCurrentMonth = selectedYear === now.getFullYear() && selectedMonth === now.getMonth();
-
-            // Format dates for Supabase query
-            const startDate = monthStart.toISOString().split('T')[0];
-            const endDate = (isCurrentMonth ? now : monthEnd).toISOString().split('T')[0];
 
             // --- A. Load SECTIONS Dropdown ---
             let sectionBaseQuery = supabase
@@ -131,9 +128,7 @@ export function useAttendanceData({ filters, lecturerId, userRole }) {
             }));
             setSections(formattedSections);
 
-            // --- B. Attendance Trend Calculation (filtered by month) ---
-            // Note: Supabase doesn't support .gte/.lte on nested joins well,
-            // so we fetch all and filter client-side
+            // --- B. Attendance Trend Calculation (filtered by month if specified) ---
             let attendanceQuery = supabase
                 .from("attendance_records")
                 .select(`
@@ -157,11 +152,13 @@ export function useAttendanceData({ filters, lecturerId, userRole }) {
             const { data: allTrend, error: trendError } = await attendanceQuery;
             if (trendError) throw trendError;
 
-            // Filter by date range client-side
-            const trend = (allTrend || []).filter(r => {
-                const classDate = new Date(r.class_sessions.class_date);
-                return classDate >= monthStart && classDate <= (isCurrentMonth ? now : monthEnd);
-            });
+            // Filter by date range client-side (only if month is selected)
+            const trend = isAllTime
+                ? (allTrend || [])
+                : (allTrend || []).filter(r => {
+                    const classDate = new Date(r.class_sessions.class_date);
+                    return classDate >= monthStart && classDate <= (isCurrentMonth ? now : monthEnd);
+                });
 
             // Transform trend data - group by week of month
             const grouped = {};
@@ -286,11 +283,13 @@ export function useAttendanceData({ filters, lecturerId, userRole }) {
             const { data: reportData, error: reportError } = await reportQuery;
 
             if (!reportError && reportData) {
-                // Filter by date range
-                const filteredReportData = reportData.filter(r => {
-                    const classDate = new Date(r.class_sessions.class_date);
-                    return classDate >= monthStart && classDate <= (isCurrentMonth ? now : monthEnd);
-                });
+                // Filter by date range (only if month is selected)
+                const filteredReportData = isAllTime
+                    ? reportData
+                    : reportData.filter(r => {
+                        const classDate = new Date(r.class_sessions.class_date);
+                        return classDate >= monthStart && classDate <= (isCurrentMonth ? now : monthEnd);
+                    });
 
                 // Aggregate per student
                 const studentStats = {};

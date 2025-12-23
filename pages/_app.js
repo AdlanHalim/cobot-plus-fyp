@@ -4,13 +4,17 @@
  * 
  * @description
  * Next.js custom App component for the CObot+ Attendance System.
- * Wraps all pages with Supabase session provider for authentication.
+ * Wraps all pages with Supabase session provider and UserProvider.
  * 
  * Key responsibilities:
  * - Initialize Supabase client for client-side usage
- * - Provide session context to all pages via SessionContextProvider
+ * - Provide session context via SessionContextProvider
+ * - Provide user profile/role context via UserProvider (fetched once)
  * - Import global CSS styles
- * - Handle server-side session pre-fetching
+ * 
+ * Performance optimizations:
+ * - Removed getInitialProps to enable client-side navigation
+ * - Centralized user profile fetching in UserProvider
  * 
  * @see https://nextjs.org/docs/advanced-features/custom-app
  */
@@ -18,6 +22,7 @@
 import { useState } from 'react';
 import { SessionContextProvider } from '@supabase/auth-helpers-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { UserProvider } from '@/contexts/UserContext';
 
 // Global stylesheet imports
 // These styles are applied to all pages in the application
@@ -40,7 +45,7 @@ const createSupabaseClient = () => createClientComponentClient();
  * Custom App Component
  * 
  * All pages in the application are wrapped by this component.
- * Provides Supabase session context for authentication.
+ * Provides Supabase session context and centralized user state.
  * 
  * @param {Object} props
  * @param {React.ComponentType} props.Component - The active page component
@@ -53,41 +58,28 @@ function MyApp({ Component, pageProps }) {
   const [supabaseClient] = useState(createSupabaseClient);
 
   // SessionContextProvider makes session available via useSession() hook
-  // initialSession from getInitialProps enables SSR auth
+  // UserProvider fetches profile ONCE and shares it across all pages
   return (
-    <SessionContextProvider
-      supabaseClient={supabaseClient}
-      initialSession={pageProps.initialSession}
-    >
-      <Component {...pageProps} />
+    <SessionContextProvider supabaseClient={supabaseClient}>
+      <UserProvider>
+        <Component {...pageProps} />
+      </UserProvider>
     </SessionContextProvider>
   );
 }
 
-
-// 🔑 DEFINITIVE FIX: Create the client locally inside getInitialProps 
-// to ensure it correctly parses the server-side cookies (req/res).
-MyApp.getInitialProps = async ({ ctx }) => {
-  // CRITICAL: Must create a new client instance here using the server-side context (req/res)
-  // The previous client instance defined globally doesn't have the req/res context.
-  const supabaseServerClient = createClientComponentClient({ req: ctx.req, res: ctx.res });
-
-  // 1. Fetch user data using the server-aware client
-  const { data: { session } } = await supabaseServerClient.auth.getSession();
-
-  // 2. Return the props
-  return {
-    pageProps: {
-      // This session object is what prevents the component from seeing a null session on first render.
-      initialSession: session || null,
-    }
-  };
-};
-
 export default MyApp;
 
+// NOTE: getInitialProps has been REMOVED to enable Next.js client-side navigation.
+// This significantly improves navigation performance by:
+// 1. Not blocking on SSR for every page change
+// 2. Allowing browser-side caching of pages
+// 3. Enabling instant navigation with React state
 
-// Optional: A modern helper function to get the current logged-in user
+/**
+ * Helper function to get the current logged-in user.
+ * @returns {Promise<User|null>} Current user or null
+ */
 export async function getCurrentUser() {
   const supabase = createClientComponentClient();
   const { data: { user } } = await supabase.auth.getUser();

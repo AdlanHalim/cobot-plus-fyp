@@ -9,7 +9,8 @@
  * Features:
  * - Auto-load attendance for logged-in students
  * - Admin search by matric number
- * - Stats cards: Total Classes, Present, Late, Absent
+ * - Per-class summary cards with attendance percentage
+ * - Class selector dropdown for filtering
  * - Tab views: Calendar, Details Table, My Excuses
  * - In-line excuse submission for absent records
  * - Document upload for excuse evidence
@@ -24,7 +25,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle, CheckCircle, Clock, Search, User, Mail,
-  Calendar as CalendarIcon, List, FileText, Send, Upload, XCircle
+  Calendar as CalendarIcon, List, FileText, Send, Upload, XCircle, BookOpen
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AttendanceCalendar } from "@/components/attendance/AttendanceCalendar";
@@ -60,6 +61,13 @@ function StudentView() {
     message,
     handleSearch,
     isAutoLoaded,
+    // Per-class features
+    selectedClass,
+    setSelectedClass,
+    enrolledClasses,
+    classSummaries,
+    filteredRecords,
+    filteredStats,
   } = useStudentSearch({ autoLoad: isStudent });
 
   // Excuse management
@@ -78,7 +86,11 @@ function StudentView() {
   const [excuseFile, setExcuseFile] = useState(null);
   const [isSubmittingExcuse, setIsSubmittingExcuse] = useState(false);
 
-  const totalClasses = attendanceRecords.length;
+  // Use filtered stats when a class is selected
+  const displayStats = selectedClass === "all"
+    ? { present: totalPresent, late: totalLate, absent: totalAbsences, total: attendanceRecords.length }
+    : filteredStats;
+
 
   const getStatusIcon = (status) => {
     switch (status) {
@@ -239,12 +251,76 @@ function StudentView() {
             </CardContent>
           </Card>
 
+          {/* Per-Class Summary Cards */}
+          {enrolledClasses.length > 1 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-700">Your Classes</h3>
+                <select
+                  value={selectedClass}
+                  onChange={(e) => setSelectedClass(e.target.value)}
+                  className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 bg-white text-slate-700 focus:ring-2 focus:ring-teal-400 focus:outline-none"
+                >
+                  <option value="all">All Classes</option>
+                  {enrolledClasses.map((cls) => (
+                    <option key={cls.id} value={cls.id}>{cls.displayName}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {classSummaries.map((cls) => (
+                  <button
+                    key={cls.id}
+                    onClick={() => setSelectedClass(cls.id === selectedClass ? "all" : cls.id)}
+                    className={`p-4 rounded-xl border text-left transition-all duration-200 hover:shadow-md ${selectedClass === cls.id
+                      ? "border-teal-500 bg-teal-50 ring-2 ring-teal-200"
+                      : "border-slate-200 bg-white hover:border-slate-300"
+                      }`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${cls.statusColor === "emerald" ? "bg-emerald-100" :
+                          cls.statusColor === "amber" ? "bg-amber-100" : "bg-rose-100"
+                          }`}>
+                          <BookOpen className={`w-4 h-4 ${cls.statusColor === "emerald" ? "text-emerald-600" :
+                            cls.statusColor === "amber" ? "text-amber-600" : "text-rose-600"
+                            }`} />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-800 text-sm">{cls.courseCode}</p>
+                          <p className="text-xs text-slate-500">{cls.name}</p>
+                        </div>
+                      </div>
+                      <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${cls.statusColor === "emerald" ? "bg-emerald-100 text-emerald-700" :
+                        cls.statusColor === "amber" ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"
+                        }`}>
+                        {cls.statusLabel}
+                      </span>
+                    </div>
+                    <div className="flex items-end justify-between mt-3">
+                      <div className="flex gap-3 text-xs">
+                        <span className="text-emerald-600">✓ {cls.present}</span>
+                        <span className="text-amber-600">⏱ {cls.late}</span>
+                        <span className="text-rose-600">✕ {cls.absent}</span>
+                      </div>
+                      <p className={`text-lg font-bold ${cls.percentage >= 80 ? "text-emerald-600" :
+                        cls.percentage >= 60 ? "text-amber-600" : "text-rose-600"
+                        }`}>
+                        {cls.percentage}%
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Stats Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <Card className="bg-white shadow-sm border border-slate-100">
               <CardContent className="p-5">
                 <p className="text-sm text-slate-500 mb-1">Total Classes</p>
-                <p className="text-2xl font-bold text-slate-800">{totalClasses}</p>
+                <p className="text-2xl font-bold text-slate-800">{displayStats.total}</p>
               </CardContent>
             </Card>
             <Card className="bg-white shadow-sm border border-slate-100">
@@ -253,7 +329,7 @@ function StudentView() {
                   <p className="text-sm text-slate-500">Present</p>
                   <CheckCircle className="w-4 h-4 text-emerald-500" />
                 </div>
-                <p className="text-2xl font-bold text-emerald-600">{totalPresent}</p>
+                <p className="text-2xl font-bold text-emerald-600">{displayStats.present}</p>
               </CardContent>
             </Card>
             <Card className="bg-white shadow-sm border border-slate-100">
@@ -262,17 +338,17 @@ function StudentView() {
                   <p className="text-sm text-slate-500">Late</p>
                   <Clock className="w-4 h-4 text-amber-500" />
                 </div>
-                <p className="text-2xl font-bold text-amber-600">{totalLate}</p>
+                <p className="text-2xl font-bold text-amber-600">{displayStats.late}</p>
               </CardContent>
             </Card>
-            <Card className={`shadow-sm border ${totalAbsences >= 3 ? "bg-rose-50 border-rose-200" : "bg-white border-slate-100"}`}>
+            <Card className={`shadow-sm border ${displayStats.absent >= 3 ? "bg-rose-50 border-rose-200" : "bg-white border-slate-100"}`}>
               <CardContent className="p-5">
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-sm text-slate-500">Absent</p>
-                  <AlertTriangle className={`w-4 h-4 ${totalAbsences >= 3 ? "text-rose-500" : "text-slate-400"}`} />
+                  <AlertTriangle className={`w-4 h-4 ${displayStats.absent >= 3 ? "text-rose-500" : "text-slate-400"}`} />
                 </div>
-                <p className={`text-2xl font-bold ${totalAbsences >= 3 ? "text-rose-600" : "text-slate-800"}`}>{totalAbsences}</p>
-                {totalAbsences >= 3 && <p className="text-xs text-rose-600 mt-1">⚠️ Warning threshold</p>}
+                <p className={`text-2xl font-bold ${displayStats.absent >= 3 ? "text-rose-600" : "text-slate-800"}`}>{displayStats.absent}</p>
+                {displayStats.absent >= 3 && <p className="text-xs text-rose-600 mt-1">⚠️ Warning threshold</p>}
               </CardContent>
             </Card>
           </div>
@@ -307,7 +383,7 @@ function StudentView() {
           <Card className="bg-white shadow-sm border border-slate-100">
             <CardContent className="p-6">
               {activeTab === "calendar" && (
-                <AttendanceCalendar attendanceRecords={attendanceRecords} />
+                <AttendanceCalendar attendanceRecords={filteredRecords} />
               )}
 
               {activeTab === "table" && (
@@ -324,8 +400,8 @@ function StudentView() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {attendanceRecords.length > 0 ? (
-                        attendanceRecords.map((record, index) => {
+                      {filteredRecords.length > 0 ? (
+                        filteredRecords.map((record, index) => {
                           const session = record.class_sessions;
                           const section = session?.sections;
                           const course = section?.courses;
