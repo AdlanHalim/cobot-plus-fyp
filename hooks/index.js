@@ -43,3 +43,11 @@ export { useExcuseManagement } from "./useExcuseManagement"; // Submit and revie
 
 // Utilities
 export { useDebounce } from "./useDebounce"; // Debounce values for performance
+
+// Data Caching (Performance)
+export {
+    useDataCache,
+    clearAllCache,
+    clearCacheByPrefix
+} from "./useDataCache"; // In-memory cache for Supabase queries
+

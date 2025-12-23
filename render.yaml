@@ -1,0 +1,26 @@
+# Render Blueprint Configuration for CObot+ Attendance System
+# See: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: cobot-plus
+    runtime: node
+    region: singapore  # Closest to Malaysia for lower latency
+    plan: free  # Change to 'starter' or higher for production
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false  # Set manually in Render dashboard
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false  # Set manually in Render dashboard
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false  # Set manually in Render dashboard
+      - key: NEXT_PUBLIC_PI_URL
+        sync: false  # Set manually in Render dashboard
+      - key: NEXT_PUBLIC_PI_API_KEY
+        sync: false  # Set manually in Render dashboard
+    healthCheckPath: /api/health
+    autoDeploy: true  # Auto-deploy on git push

@@ -126,7 +126,7 @@ function AttendanceDashboard() {
   // Get selected month label for display
   const selectedMonthLabel = availableMonths?.find(m => m.value === filters.month)?.label || 'This Month';
 
-  // Handle sending email notifications
+  // Handle sending email notifications with PDF letter attachment
   const handleSendEmail = async (student, absenceCount) => {
     const actionType = absenceCount === 3 ? "warning" : "barring";
     const listToUpdate = absenceCount === 3 ? absent3 : absent6;
@@ -138,8 +138,31 @@ function AttendanceDashboard() {
       : "Barring Notice – Excessive Absences";
 
     const bodyText = actionType === "warning"
-      ? `Dear ${student.name},\n\nYou have been absent 3 times in ${student.course}.\nPlease take this as an official warning.\n\nRegards,\nAcademic Affairs Office`
-      : `Dear ${student.name},\n\nYou have been absent 6 times in ${student.course}.\nAs per attendance policy, you are hereby barred from final examinations.\n\nPlease contact your course lecturer immediately.\n\nRegards,\nAcademic Affairs Office`;
+      ? `Dear ${student.name},\n\nYou have been absent 3 times in ${student.course}.\nPlease take this as an official warning.\n\nPlease find attached the official warning letter for your reference.\n\nRegards,\nAcademic Affairs Office`
+      : `Dear ${student.name},\n\nYou have been absent 6 times in ${student.course}.\nAs per attendance policy, you are hereby barred from final examinations.\n\nPlease find attached the official barring notice for your reference.\n\nPlease contact your course lecturer immediately.\n\nRegards,\nAcademic Affairs Office`;
+
+    // Generate PDF letter
+    let pdfBase64 = null;
+    try {
+      const { generateWarningLetter, generateBarringLetter } = await import("../utils/generateLetterPDF");
+
+      const letterData = {
+        studentName: student.name,
+        matricNo: student.matric_no,
+        courseName: student.course,
+        sectionName: student.section_id,
+        absenceCount: absenceCount,
+      };
+
+      if (actionType === "warning") {
+        pdfBase64 = await generateWarningLetter(letterData);
+      } else {
+        pdfBase64 = await generateBarringLetter(letterData);
+      }
+    } catch (pdfError) {
+      console.error("Failed to generate PDF letter:", pdfError);
+      // Continue without PDF if generation fails
+    }
 
     const { error: invokeError } = await supabase.functions.invoke("send-email", {
       method: "POST",
@@ -150,6 +173,10 @@ function AttendanceDashboard() {
         student_id: student.id,
         section_id: student.section_id,
         email_type: actionType,
+        pdf_attachment: pdfBase64,
+        pdf_filename: actionType === "warning"
+          ? `Warning_Letter_${student.matric_no}.pdf`
+          : `Barring_Notice_${student.matric_no}.pdf`,
       },
     });
 

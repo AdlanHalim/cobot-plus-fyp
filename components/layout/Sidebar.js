@@ -13,12 +13,15 @@
  * - User profile display (name, role, avatar)
  * - Active route highlighting
  * - Logout functionality
+ * 
+ * Performance: Uses centralized UserContext for profile data (no DB queries)
  */
 
 import { useRouter } from "next/router";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useSession, useSupabaseClient } from "@supabase/auth-helpers-react";
+import { useUser } from "@/contexts/UserContext";
 import Image from "next/image";
 import {
     LayoutDashboard,
@@ -36,42 +39,21 @@ import {
 
 /**
  * Sidebar Navigation Component
- * Fetches user profile and renders role-appropriate navigation links.
+ * Uses centralized UserContext for profile data - no duplicate DB fetches.
  */
 const Sidebar = () => {
     const router = useRouter();
     const [isCollapsed, setIsCollapsed] = useState(false);
     const session = useSession();
     const supabase = useSupabaseClient();
-    const [profile, setProfile] = useState(null);
-    const [profileLoading, setProfileLoading] = useState(true);
 
-    useEffect(() => {
-        if (session?.user) {
-            const fetchProfile = async () => {
-                const { data, error } = await supabase
-                    .from("profiles")
-                    .select("role, full_name")
-                    .eq("id", session.user.id)
-                    .single();
-
-                if (data) setProfile(data);
-                if (error) console.error("Error fetching profile:", error);
-                setProfileLoading(false);
-            };
-            fetchProfile();
-        } else {
-            setProfile(null);
-            setProfileLoading(false);
-        }
-    }, [session?.user, supabase]);
+    // Use centralized context - NO database query here!
+    const { profile, userRole, isLoading: profileLoading } = useUser();
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
         router.push("/login");
     };
-
-    const userRole = profile?.role || "student";
 
     const navItems = [
         { href: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["lecturer", "admin"] },
@@ -85,7 +67,9 @@ const Sidebar = () => {
         { href: "/settings", label: "Settings", icon: Settings, roles: ["admin"] },
     ];
 
-    const filteredNavItems = navItems.filter((item) => item.roles.includes(userRole));
+    // Use role from context, default to student
+    const currentRole = userRole || "student";
+    const filteredNavItems = navItems.filter((item) => item.roles.includes(currentRole));
 
     if (profileLoading) {
         return (
@@ -157,6 +141,11 @@ const Sidebar = () => {
                             <Link
                                 key={item.href}
                                 href={item.href}
+                                prefetch={false}
+                                onMouseEnter={() => {
+                                    // Prefetch page on hover for instant navigation
+                                    router.prefetch(item.href);
+                                }}
                                 onClick={() => setIsCollapsed(true)}
                                 className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200
                   ${isActive
@@ -189,7 +178,7 @@ const Sidebar = () => {
                                 <p className="text-sm font-medium text-slate-800 truncate">
                                     {profile?.full_name || "User"}
                                 </p>
-                                <p className="text-xs text-slate-500 capitalize">{userRole}</p>
+                                <p className="text-xs text-slate-500 capitalize">{currentRole}</p>
                             </div>
                         </div>
                     )}

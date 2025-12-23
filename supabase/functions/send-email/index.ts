@@ -57,7 +57,9 @@ serve(async (req) => {
       content, // The email body/text
       student_id,
       section_id,
-      email_type
+      email_type,
+      pdf_attachment, // Optional: base64 encoded PDF
+      pdf_filename,   // Optional: filename for the PDF attachment
     } = await req.json();
 
     if (!to || !subject || !content || !student_id || !section_id || !email_type) {
@@ -86,12 +88,32 @@ serve(async (req) => {
       },
     });
 
-    await transporter.sendMail({
+    // Build email options with optional PDF attachment
+    const mailOptions: {
+      from: string;
+      to: string;
+      subject: string;
+      text: string;
+      attachments?: Array<{ filename: string; content: string; encoding: string }>;
+    } = {
       from: EMAIL_USER,
       to,
       subject,
       text: content,
-    });
+    };
+
+    // Add PDF attachment if provided
+    if (pdf_attachment && pdf_filename) {
+      mailOptions.attachments = [
+        {
+          filename: pdf_filename,
+          content: pdf_attachment,
+          encoding: 'base64',
+        },
+      ];
+    }
+
+    await transporter.sendMail(mailOptions);
 
     // 2. Determine the DB column to update
     if (email_type === 'warning') {

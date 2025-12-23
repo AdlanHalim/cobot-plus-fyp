@@ -6,6 +6,9 @@
  * Higher-Order Component (HOC) for role-based access control.
  * Wraps page components to enforce authentication and authorization.
  * 
+ * Performance optimization: Uses centralized UserContext instead of
+ * fetching profile on every page. Authorization is instant after initial load.
+ * 
  * @example
  * // Protect a page for admin and lecturer only
  * export default withRole(AnalysisPage, ["admin", "lecturer"]);
@@ -18,7 +21,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { useSessionContext } from '@supabase/auth-helpers-react';
 import { motion } from "framer-motion";
-import { useUserRole } from "@/hooks";
+import { useUser } from "@/contexts/UserContext";
 
 /**
  * Loading spinner component displayed while checking authentication/authorization.
@@ -48,7 +51,7 @@ const LoadingSpinner = () => (
  * @description
  * Authorization Flow:
  * 1. Wait for Supabase session to load
- * 2. Wait for user role to be fetched from profiles table
+ * 2. Read user role from centralized context (no DB query!)
  * 3. If no session → redirect to /login
  * 4. If session but role not in allowedRoles → redirect to /unauthorized
  * 5. If authorized → render the protected component
@@ -65,15 +68,15 @@ export default function withRole(Component, allowedRoles = []) {
     const router = useRouter();
     const { isLoading: isSupabaseLoading, session } = useSessionContext();
 
-    // Use shared useUserRole hook instead of duplicate DB call
-    const { userRole, isLoading: isRoleLoading } = useUserRole();
+    // Use centralized context - no DB query, instant access!
+    const { userRole, isLoading: isUserLoading } = useUser();
 
     const [authorized, setAuthorized] = useState(false);
     const [checked, setChecked] = useState(false);
 
     useEffect(() => {
-      // Wait for Supabase session and role to load
-      if (isSupabaseLoading || isRoleLoading) return;
+      // Wait for both session and user context to load
+      if (isSupabaseLoading || isUserLoading) return;
 
       // Not logged in - redirect to login
       if (!session) {
@@ -82,7 +85,7 @@ export default function withRole(Component, allowedRoles = []) {
         return;
       }
 
-      // Session exists but no role yet (still loading)
+      // Session exists but no role yet (edge case)
       if (!userRole) return;
 
       // Check authorization
@@ -92,10 +95,10 @@ export default function withRole(Component, allowedRoles = []) {
         router.replace("/unauthorized");
       }
       setChecked(true);
-    }, [isSupabaseLoading, isRoleLoading, session, userRole, router, allowedRoles]);
+    }, [isSupabaseLoading, isUserLoading, session, userRole, router, allowedRoles]);
 
     // Show loading while checking
-    if (isSupabaseLoading || isRoleLoading || !checked) {
+    if (isSupabaseLoading || isUserLoading || !checked) {
       return <LoadingSpinner />;
     }
 
