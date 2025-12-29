@@ -23,6 +23,7 @@ import { useState, useEffect } from 'react';
 import { SessionContextProvider } from '@supabase/auth-helpers-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { loadConfig } from "@/utils/config";
+import { UserProvider } from "@/contexts/UserContext";
 
 // Global stylesheet imports
 import '../styles/globals.css';
@@ -64,7 +65,9 @@ function MyApp({ Component, pageProps }) {
       supabaseClient={supabaseClient}
       initialSession={pageProps.initialSession}
     >
-      <Component {...pageProps} />
+      <UserProvider>
+        <Component {...pageProps} />
+      </UserProvider>
     </SessionContextProvider>
   );
 }
