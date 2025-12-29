@@ -1,129 +1,61 @@
 "use client";
-import { useState, useEffect } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import DashboardLayout from "@/components/DashboardLayout";
+import { useState, useMemo } from "react";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 import ReactModal from "react-modal";
-import { toast, ToastContainer } from "react-toastify";
+import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { Cog6ToothIcon } from "@heroicons/react/24/outline";
-import withRole from "../utils/withRole"; // Ensure this import is present
+import withRole from "../utils/withRole";
+import { useStudentManagement } from "@/hooks";
 
 ReactModal.setAppElement("#__next");
 
 function ManageStudent() {
-  const supabase = createClientComponentClient();
-  const [students, setStudents] = useState([]);
-  const [courses, setCourses] = useState([]);
-  const [sections, setSections] = useState([]);
+  // Use custom hook for data and operations
+  const {
+    students,
+    courses,
+    sections,
+    loading,
+    selectedStudent,
+    studentEnrollments,
+    isModalOpen,
+    openManageCourses,
+    closeModal,
+    toggleEnrollment,
+    saveEnrollments,
+  } = useStudentManagement();
+
+  // Local UI state for filtering and pagination
   const [selectedCourse, setSelectedCourse] = useState("All");
   const [selectedSection, setSelectedSection] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [courseModalOpen, setCourseModalOpen] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState(null);
-  const [studentEnrollments, setStudentEnrollments] = useState([]);
-
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
-  useEffect(() => {
-    fetchStudents();
-    fetchCourses();
-    fetchSections();
-  }, []);
-
-  const fetchStudents = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("students")
-      .select(`
-        id,
-        name,
-        matric_no,
-        email,
-        student_section_enrollments (
-          section_id,
-          sections (
-            id,
-            name,
-            course_id,
-            courses ( code, name )
-          )
-        )
-      `)
-      .order("name");
-
-    if (error) toast.error("Failed to load students");
-    else setStudents(data || []);
-    setLoading(false);
-  };
-
-  const fetchCourses = async () => {
-    const { data } = await supabase.from("courses").select("id, code, name").order("code");
-    setCourses(data || []);
-  };
-
-  const fetchSections = async () => {
-    const { data } = await supabase.from("sections").select("id, name, course_id").order("name");
-    setSections(data || []);
-  };
-
-  const filteredStudents = students.filter((student) => {
-    const matchesCourse =
-      selectedCourse === "All" ||
-      student.student_section_enrollments.some(
-        (enroll) => enroll.sections?.courses?.code === selectedCourse
-      );
-    const matchesSection =
-      selectedSection === "All" ||
-      student.student_section_enrollments.some(
-        (enroll) => enroll.sections?.id === selectedSection
-      );
-    const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCourse && matchesSection && matchesSearch;
-  });
+  // Filter students based on UI selections
+  const filteredStudents = useMemo(() => {
+    return students.filter((student) => {
+      const matchesCourse =
+        selectedCourse === "All" ||
+        student.student_section_enrollments?.some(
+          (enroll) => enroll.sections?.courses?.code === selectedCourse
+        );
+      const matchesSection =
+        selectedSection === "All" ||
+        student.student_section_enrollments?.some(
+          (enroll) => enroll.sections?.id === selectedSection
+        );
+      const matchesSearch = student.name?.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCourse && matchesSection && matchesSearch;
+    });
+  }, [students, selectedCourse, selectedSection, searchQuery]);
 
   const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
   const currentStudents = filteredStudents.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
-
-  const openManageCourses = async (student) => {
-    setSelectedStudent(student);
-    setCourseModalOpen(true);
-    const { data } = await supabase
-      .from("student_section_enrollments")
-      .select("section_id")
-      .eq("student_id", student.id);
-    setStudentEnrollments(data.map((e) => e.section_id));
-  };
-
-  const toggleEnrollment = (sectionId) => {
-    setStudentEnrollments((prev) =>
-      prev.includes(sectionId)
-        ? prev.filter((id) => id !== sectionId)
-        : [...prev, sectionId]
-    );
-  };
-
-  const saveEnrollments = async () => {
-    if (!selectedStudent) return;
-
-    await supabase.from("student_section_enrollments").delete().eq("student_id", selectedStudent.id);
-
-    if (studentEnrollments.length > 0) {
-      const newEnrollments = studentEnrollments.map((sectionId) => ({
-        student_id: selectedStudent.id,
-        section_id: sectionId,
-      }));
-      await supabase.from("student_section_enrollments").insert(newEnrollments);
-    }
-
-    toast.success("✅ Student enrollments updated");
-    setCourseModalOpen(false);
-    fetchStudents();
-  };
 
   const modalStyles = {
     content: {
@@ -139,11 +71,11 @@ function ManageStudent() {
       boxShadow: "0 8px 25px rgba(0,0,0,0.1)",
     },
     overlay: {
-        backgroundColor: 'rgba(0, 0, 0, 0.45)'
-    }
+      backgroundColor: "rgba(0, 0, 0, 0.45)",
+    },
   };
 
-  if (loading)
+  if (loading) {
     return (
       <DashboardLayout>
         <div className="flex justify-center items-center h-full py-20 text-slate-500">
@@ -151,14 +83,16 @@ function ManageStudent() {
         </div>
       </DashboardLayout>
     );
+  }
 
   return (
     <DashboardLayout>
       <ToastContainer />
-      <div className="min-h-screen p-8 bg-[#e6f0fb] text-slate-700 flex flex-col">
-        <h1 className="text-3xl font-bold text-center mb-8 bg-gradient-to-r from-indigo-600 via-sky-600 to-teal-600 bg-clip-text text-transparent">
-          🎓 Manage Student Enrollments
-        </h1>
+      <div className="min-h-screen p-8 text-slate-700 flex flex-col">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-slate-800">Student Enrollments</h1>
+          <p className="text-slate-500 text-sm">Manage student course registrations</p>
+        </div>
 
         {/* Filters */}
         <div className="flex flex-wrap justify-between items-center mb-6 gap-3">
@@ -179,19 +113,13 @@ function ManageStudent() {
             <select
               value={selectedSection}
               onChange={(e) => setSelectedSection(e.target.value)}
-              className="rounded-xl px-3 py-2 bg-white/70 backdrop-blur-md border border-slate-200 focus:ring-2 focus:ring-indigo-400 transition"
+              className="rounded-xl px-3 py-2 bg-white/70 backdrop-blur-md border border-slate-200 focus:ring-2 focus:ring-teal-400 transition"
             >
               <option value="All">All Sections</option>
               {sections
-                .filter(
-                  (s) =>
-                    selectedCourse === "All" ||
-                    s.course_id === courses.find((c) => c.code === selectedCourse)?.id
-                )
+                .filter((s) => selectedCourse === "All" || s.course_id === courses.find((c) => c.code === selectedCourse)?.id)
                 .map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
+                  <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
             </select>
           </div>
@@ -206,7 +134,7 @@ function ManageStudent() {
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto bg-white/70 backdrop-blur-md rounded-2xl shadow-md border border-slate-200">
+        <div className="overflow-x-auto bg-white rounded-2xl shadow-sm border border-slate-100">
           <table className="min-w-full border-collapse text-sm">
             <thead>
               <tr className="bg-slate-100/80 text-slate-600 text-xs uppercase tracking-wide">
@@ -227,7 +155,7 @@ function ManageStudent() {
               ) : (
                 currentStudents.map((s) => {
                   const sectionText = s.student_section_enrollments
-                    .map(enroll => `${enroll.sections?.courses?.code}-${enroll.sections?.name}`)
+                    ?.map((enroll) => `${enroll.sections?.courses?.code}-${enroll.sections?.name}`)
                     .join(", ");
                   return (
                     <tr key={s.id} className="border-b border-slate-100 hover:bg-sky-50/60 transition">
@@ -237,7 +165,7 @@ function ManageStudent() {
                       <td className="px-3 py-2">
                         {sectionText ? (
                           <span className="text-slate-600" title={sectionText}>
-                            {s.student_section_enrollments.length} section(s)
+                            {s.student_section_enrollments?.length} section(s)
                           </span>
                         ) : (
                           <span className="text-slate-400 italic">No section</span>
@@ -246,7 +174,7 @@ function ManageStudent() {
                       <td className="px-3 py-2 text-center">
                         <button
                           onClick={() => openManageCourses(s)}
-                          className="p-2 rounded-full bg-gradient-to-r from-indigo-500 to-teal-500 text-white hover:opacity-90 hover:scale-[1.05] transition"
+                          className="p-2 rounded-full bg-gradient-to-r from-teal-500 to-cyan-500 text-white hover:opacity-90 hover:scale-[1.05] transition"
                           title="Manage Enrollments"
                         >
                           <Cog6ToothIcon className="w-5 h-5" />
@@ -264,7 +192,7 @@ function ManageStudent() {
         {totalPages > 1 && (
           <div className="flex justify-center items-center gap-2 mt-6">
             <button
-              className="px-3 py-1 bg-gradient-to-r from-teal-500 to-indigo-500 text-white rounded-lg hover:opacity-90 disabled:opacity-40"
+              className="px-3 py-1 bg-gradient-to-r from-teal-500 to-cyan-500 text-white rounded-lg hover:opacity-90 disabled:opacity-40"
               disabled={currentPage === 1}
               onClick={() => setCurrentPage((p) => p - 1)}
             >
@@ -274,7 +202,7 @@ function ManageStudent() {
               Page <b>{currentPage}</b> of {totalPages}
             </span>
             <button
-              className="px-3 py-1 bg-gradient-to-r from-teal-500 to-indigo-500 text-white rounded-lg hover:opacity-90 disabled:opacity-40"
+              className="px-3 py-1 bg-gradient-to-r from-teal-500 to-cyan-500 text-white rounded-lg hover:opacity-90 disabled:opacity-40"
               disabled={currentPage === totalPages}
               onClick={() => setCurrentPage((p) => p + 1)}
             >
@@ -284,40 +212,30 @@ function ManageStudent() {
         )}
 
         {/* Modal */}
-        <ReactModal
-          isOpen={courseModalOpen}
-          onRequestClose={() => setCourseModalOpen(false)}
-          style={modalStyles}
-        >
-          {/* Clean Gradient Header */}
+        <ReactModal isOpen={isModalOpen} onRequestClose={closeModal} style={modalStyles}>
           <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold bg-gradient-to-r from-indigo-500 to-teal-500 bg-clip-text text-transparent">
+            <h2 className="text-2xl font-bold bg-gradient-to-r from-teal-500 to-cyan-500 bg-clip-text text-transparent">
               Manage Courses
             </h2>
             <p className="text-slate-600 mt-1">{selectedStudent?.name}</p>
           </div>
 
-          {/* Courses as compact cards */}
           <div className="grid grid-cols-1 gap-3">
             {courses.map((course) => {
-              const relatedSections = sections.filter(s => s.course_id === course.id);
+              const relatedSections = sections.filter((s) => s.course_id === course.id);
               return (
-                <div
-                  key={course.id}
-                  className="bg-white/60 backdrop-blur-md rounded-xl border border-slate-200 p-3 shadow-sm"
-                >
-                  <h3 className="font-semibold text-indigo-600 text-sm mb-2">
+                <div key={course.id} className="bg-white/60 backdrop-blur-md rounded-xl border border-slate-200 p-3 shadow-sm">
+                  <h3 className="font-semibold text-teal-600 text-sm mb-2">
                     {course.code} - {course.name}
                   </h3>
                   <div className="flex flex-wrap gap-2">
                     {relatedSections.map((sec) => (
                       <label
                         key={sec.id}
-                        className={`px-2 py-1 rounded-full text-xs cursor-pointer border ${
-                          studentEnrollments.includes(sec.id)
-                            ? "bg-teal-500 text-white border-teal-500"
-                            : "bg-slate-100 text-slate-600 border-slate-200"
-                        } transition`}
+                        className={`px-2 py-1 rounded-full text-xs cursor-pointer border ${studentEnrollments.includes(sec.id)
+                          ? "bg-teal-500 text-white border-teal-500"
+                          : "bg-slate-100 text-slate-600 border-slate-200"
+                          } transition`}
                       >
                         <input
                           type="checkbox"
@@ -334,16 +252,15 @@ function ManageStudent() {
             })}
           </div>
 
-          {/* Modal actions */}
           <div className="flex justify-end gap-3 mt-6">
             <button
               onClick={saveEnrollments}
-              className="px-4 py-2 rounded-lg text-white bg-gradient-to-r from-teal-500 to-indigo-500 hover:scale-[1.03] transition"
+              className="px-4 py-2 rounded-lg text-white bg-gradient-to-r from-teal-500 to-cyan-500 hover:scale-[1.03] transition"
             >
               Save
             </button>
             <button
-              onClick={() => setCourseModalOpen(false)}
+              onClick={closeModal}
               className="px-4 py-2 rounded-lg bg-slate-200/70 hover:bg-slate-300/80 transition"
             >
               Cancel

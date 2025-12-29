@@ -1,343 +1,184 @@
+/**
+ * @file analysis.js
+ * @location cobot-plus-fyp/pages/analysis.js
+ * 
+ * @description
+ * Attendance Analytics Dashboard for the CObot+ Attendance System.
+ * Provides comprehensive attendance metrics, charts, and intervention tools.
+ * 
+ * Features:
+ * - KPI Cards: Average Attendance, Punctuality Score, Enrollment, Weekly Trend
+ * - Attendance Trend Line Chart with goal line (80%)
+ * - At-Risk Bar Chart showing 3+ and 6+ absence counts
+ * - Warning List: Students with 3 absences (send warning button)
+ * - Barring List: Students with 6+ absences (send barring notice)
+ * - Status Breakdown Pie Chart (Present/Late/Absent)
+ * - Chronic Late Arrivers List
+ * - CSV and PDF export functionality
+ * 
+ * @access Admin, Lecturer (protected by withRole HOC)
+ */
+
 "use client";
 
-import React, { useEffect, useState } from "react";
-import DashboardLayout from "@/components/DashboardLayout";
+import React, { useState } from "react";
+import dynamic from "next/dynamic";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Download, Mail, Users, BarChart2, TrendingUp } from "lucide-react";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  Legend,
-} from "recharts";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { useSession } from "@supabase/auth-helpers-react";
+import { Download, Mail, Users, BarChart2, TrendingUp, AlertTriangle, XCircle, CheckCircle, Clock } from "lucide-react";
+import { useSupabaseClient } from "@supabase/auth-helpers-react";
 import withRole from "../utils/withRole";
+import { useUserRole, useAttendanceData } from "@/hooks";
+// PDF generation is dynamically imported when needed to reduce initial bundle
 
-// Remove the global initialization lines:
-// const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-// const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-// const supabase = createClientComponentClient({ supabaseUrl, supabaseKey: supabaseAnonKey });
+// Lazy load recharts components to reduce initial bundle size
+// This improves page load performance by code-splitting heavy charting libraries
 
-// Define the target goal for the chart background line
+// Lazy load recharts components to reduce initial bundle size
+const LineChart = dynamic(() => import("recharts").then((mod) => mod.LineChart), { ssr: false });
+const Line = dynamic(() => import("recharts").then((mod) => mod.Line), { ssr: false });
+const XAxis = dynamic(() => import("recharts").then((mod) => mod.XAxis), { ssr: false });
+const YAxis = dynamic(() => import("recharts").then((mod) => mod.YAxis), { ssr: false });
+const CartesianGrid = dynamic(() => import("recharts").then((mod) => mod.CartesianGrid), { ssr: false });
+const Tooltip = dynamic(() => import("recharts").then((mod) => mod.Tooltip), { ssr: false });
+const ResponsiveContainer = dynamic(() => import("recharts").then((mod) => mod.ResponsiveContainer), { ssr: false });
+const BarChart = dynamic(() => import("recharts").then((mod) => mod.BarChart), { ssr: false });
+const Bar = dynamic(() => import("recharts").then((mod) => mod.Bar), { ssr: false });
+const Legend = dynamic(() => import("recharts").then((mod) => mod.Legend), { ssr: false });
+const PieChart = dynamic(() => import("recharts").then((mod) => mod.PieChart), { ssr: false });
+const Pie = dynamic(() => import("recharts").then((mod) => mod.Pie), { ssr: false });
+const Cell = dynamic(() => import("recharts").then((mod) => mod.Cell), { ssr: false });
+
 const ATTENDANCE_GOAL = 80;
 
 function AttendanceDashboard() {
-  // ✅ FIX: Initialize client and get environment variables safely inside the function
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const supabase = createClientComponentClient({ supabaseUrl, supabaseKey: supabaseAnonKey });
+  const supabase = useSupabaseClient();
 
-  const sessionResult = useSession();
-  const sessionData = sessionResult?.data;
+  // Use custom hooks for data fetching
+  const { userRole, lecturerId, isLoading: userLoading } = useUserRole();
 
-  const [attendanceData, setAttendanceData] = useState([]);
-  const [absent3, setAbsent3] = useState([]);
-  const [absent6, setAbsent6] = useState([]);
-  const [filters, setFilters] = useState({
-    section: "",
-    period: "month",
+  // Get current month as default
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  // Initialize filters from localStorage or defaults
+  const [filters, setFilters] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('analysis-filters');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          // Use saved section, default month to "" (all data)
+          return { section: parsed.section || "", month: "" };
+        } catch {
+          return { section: "", month: "" };
+        }
+      }
+    }
+    return { section: "", month: "" };
   });
 
-  const [sections, setSections] = useState([]);
-  const [averageAttendance, setAverageAttendance] = useState(0);
-  const [totalStudents, setTotalStudents] = useState(0);
-  const [trendDifference, setTrendDifference] = useState(0);
-  const [absenceStatusData, setAbsenceStatusData] = useState([]);
+  const [filtersInitialized, setFiltersInitialized] = useState(false);
 
-  const [lecturerId, setLecturerId] = useState(undefined);
-  const [userRole, setUserRole] = useState(null);
-  const [initialLoading, setInitialLoading] = useState(true);
+  const {
+    attendanceData,
+    sections,
+    averageAttendance,
+    punctualityScore,
+    totalStudents,
+    trendDifference,
+    statusBreakdown,
+    chronicLate,
+    absent3,
+    absent6,
+    absenceStatusData,
+    allStudentsReport,
+    isLoading: dataLoading,
+    setAbsent3,
+    setAbsent6,
+    setAbsenceStatusData,
+    availableMonths,
+  } = useAttendanceData({ filters, lecturerId, userRole });
 
-  const setLoadingToEmptyState = () => {
-    setAttendanceData([]);
-    setSections([]);
-    setAverageAttendance(0);
-    setTotalStudents(0);
-    setTrendDifference(0);
-    setAbsent3([]);
-    setAbsent6([]);
-  };
+  // Auto-select first section when sections load (for lecturers)
+  React.useEffect(() => {
+    if (sections.length > 0 && !filtersInitialized) {
+      // Check if saved section still exists
+      const savedSection = filters.section;
+      const sectionExists = sections.some(s => s.id === savedSection);
 
-  // --- 1. Identify User Role & Lecturer ID (Authentication and ID determination) ---
-  useEffect(() => {
-    if (!sessionResult || sessionResult.isLoading) return;
-
-    async function getUserData() {
-      if (!sessionData?.session?.user) {
-        setUserRole(null);
-        setLecturerId(null);
-        setInitialLoading(false);
-        return;
+      if (!sectionExists) {
+        // Auto-select first section
+        setFilters(f => ({ ...f, section: sections[0].id }));
       }
-
-      const user = sessionData.session.user;
-
-      // Fetch role and lecturer_uuid
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("role, lecturer_uuid")
-        .eq("id", user.id)
-        .single();
-
-      const role = profileData?.role || 'student';
-      setUserRole(role);
-
-      let foundLecturerId = null;
-
-      // Get Lecturer ID directly from the profiles table
-      if (role === 'lecturer') {
-        foundLecturerId = profileData?.lecturer_uuid || null;
-      }
-
-      // Set final lecturerId state based on role/ID check
-      if (role === 'admin') {
-        setLecturerId(false); // Admin bypass (no filtering)
-      } else {
-        setLecturerId(foundLecturerId); // Sets to UUID or null (unauthorized)
-      }
-
-      setInitialLoading(false);
+      setFiltersInitialized(true);
     }
-    getUserData();
-  }, [sessionResult]);
+  }, [sections, filtersInitialized, filters.section]);
 
-  // --- 2. Main Data Fetching Effect (Filters data based on determined ID) ---
-  useEffect(() => {
-    if (initialLoading || lecturerId === undefined || userRole === 'student') return;
-
-    if (userRole === 'lecturer' && lecturerId === null) {
-      setLoadingToEmptyState();
-      return;
+  // Persist filter changes to localStorage
+  React.useEffect(() => {
+    if (filters.section && typeof window !== 'undefined') {
+      localStorage.setItem('analysis-filters', JSON.stringify({ section: filters.section }));
     }
+  }, [filters.section]);
 
-    async function fetchData() {
-      try {
-        const isLecturerFilterNeeded = (userRole === 'lecturer' && lecturerId);
+  // Get selected month label for display
+  const selectedMonthLabel = availableMonths?.find(m => m.value === filters.month)?.label || 'This Month';
 
-        // --- A. Load SECTIONS Dropdown (with Visibility Filter) ---
-        let sectionBaseQuery = supabase
-          .from("sections")
-          .select(`
-            id, 
-            name, 
-            course_id, 
-            lecturer_id,
-            is_hidden_from_analysis,  
-            courses!inner(code)
-          `);
-
-
-        // CRITICAL FILTER 1: Apply Lecturer Scope
-        if (isLecturerFilterNeeded) {
-          sectionBaseQuery = sectionBaseQuery.eq("lecturer_id", lecturerId);
-        }
-
-        // CRITICAL FILTER 2: Apply Visibility Filter (Exclude hidden sections)
-        sectionBaseQuery = sectionBaseQuery.eq("is_hidden_from_analysis", false);
-
-
-        const { data: baseSections, error: sectionsError } = await sectionBaseQuery;
-        if (sectionsError) throw sectionsError;
-
-        // Set sections for the dropdown
-        const formattedSections = baseSections.map(s => ({
-          id: s.id,
-          name: `${s.courses.code} - ${s.name}`,
-          course_id: s.course_id
-        }));
-        setSections(formattedSections);
-
-
-        // --- B. Attendance Trend Calculation ---
-        let attendanceQuery = supabase
-          .from("attendance_records")
-          .select(`
-                status,
-                class_sessions!inner(
-                    class_date,
-                    section_id,
-                    sections!inner(lecturer_id, is_hidden_from_analysis)
-                )
-            `);
-
-        // Apply Lecturer Filter
-        if (isLecturerFilterNeeded) {
-          attendanceQuery = attendanceQuery.eq("class_sessions.sections.lecturer_id", lecturerId);
-        }
-
-        // Apply Visibility Filter
-        attendanceQuery = attendanceQuery.eq("class_sessions.sections.is_hidden_from_analysis", false);
-
-        // Apply UI Filter
-        if (filters.section) attendanceQuery = attendanceQuery.eq("class_sessions.section_id", filters.section);
-
-        const { data: trend, error: trendError } = await attendanceQuery;
-        if (trendError) throw trendError;
-
-        // Trend transform - FIXING THE WEEK ORDERING
-        const grouped = {};
-        trend?.forEach(r => {
-          const date = new Date(r.class_sessions.class_date);
-          const weekIndex = Math.ceil(date.getDate() / 7);
-          const weekLabel = `Wk ${weekIndex}`;
-
-          if (!grouped[weekIndex]) grouped[weekIndex] = {
-            weekIndex,
-            week: weekLabel,
-            total: 0,
-            present: 0
-          };
-          grouped[weekIndex].total += 1;
-          if (r.status === "present") grouped[weekIndex].present += 1;
-        });
-
-        // Calculate percentage, add goal, AND SORT BY NUMERICAL INDEX
-        const formattedTrend = Object.values(grouped)
-          .map(w => ({
-            week: w.week,
-            weekIndex: w.weekIndex,
-            attendance: Math.round((w.present / w.total) * 100),
-            goal: ATTENDANCE_GOAL
-          }))
-          .sort((a, b) => a.weekIndex - b.weekIndex);
-
-        setAttendanceData(formattedTrend);
-
-        // Summary Calculations
-        const totalRecords = trend?.length || 0;
-        const presentRecords = trend?.filter(r => r.status === "present").length || 0;
-
-        const overallAverage = totalRecords > 0 ? Math.round((presentRecords / totalRecords) * 100) : 0;
-        setAverageAttendance(overallAverage);
-
-        // Total Students (Filtered)
-        let studentQuery = supabase
-          .from("student_section_enrollments")
-          .select("student_id, sections!inner(lecturer_id, is_hidden_from_analysis)");
-
-        if (isLecturerFilterNeeded) {
-          studentQuery = studentQuery.eq("sections.lecturer_id", lecturerId);
-        }
-        studentQuery = studentQuery.eq("sections.is_hidden_from_analysis", false);
-
-        if (filters.section) studentQuery = studentQuery.eq("section_id", filters.section);
-
-        const { data: students } = await studentQuery;
-        setTotalStudents(new Set(students?.map(s => s.student_id)).size);
-
-        // Trend Difference (Percentage Change between the last two weeks)
-        const currentWeekAvg = formattedTrend.length > 0 ? formattedTrend[formattedTrend.length - 1].attendance : 0;
-        const previousWeekAvg = formattedTrend.length > 1 ? formattedTrend[formattedTrend.length - 2].attendance : 0;
-        const diffPercent = Math.round(currentWeekAvg - previousWeekAvg);
-        setTrendDifference(diffPercent);
-
-        // --- C. ACTIONABLE FIX: Load Absences 3 & 6 Filtered DIRECTLY by Section ID ---
-
-        const targetSectionId = filters.section;
-
-        let absent3List = [];
-        let absent6List = [];
-
-        if (targetSectionId) {
-          // Fetch ALL absences for courses associated with the lecturer's sections
-          const { data: allAbsencesData, error: absDataError } = await supabase
-            .from("student_course_attendance")
-            .select(`
-                    absence_count, 
-                    student_id,
-                    student:student_id(id, name, nickname, email), 
-                    sections!inner(courses!inner(code))
-                `)
-            .eq("section_id", targetSectionId); // Filter by section_id directly
-
-          if (absDataError) {
-            console.error("Absence Data Fetch Error:", absDataError);
-          }
-
-          const safeAllAbsencesData = allAbsencesData || [];
-
-          // Map data, extracting Course Code via the Section join
-          const mapAbsences = (data, count) => data
-            .filter(s => s.absence_count === count)
-            .map(s => ({
-              id: s.student_id,
-              name: s.student.nickname || s.student.name,
-              course: s.sections.courses.code,
-              section_id: targetSectionId,
-              email: s.student.email, // Include email for the Edge Function
-            }));
-
-          absent3List = mapAbsences(safeAllAbsencesData, 3);
-          absent6List = mapAbsences(safeAllAbsencesData, 6);
-
-          // Update Absence Status Data for the bar chart
-          setAbsenceStatusData([
-            {
-              name: 'Intervention Required',
-              '3+ Absences': absent3List.length,
-              '6+ Absences': absent6List.length,
-            }
-          ]);
-
-        } else {
-          // No section selected, clear lists and chart data
-          setAbsent3([]);
-          setAbsent6([]);
-          setAbsenceStatusData([]);
-        }
-
-        setAbsent3(absent3List);
-        setAbsent6(absent6List);
-
-
-      } catch (error) {
-        console.error("Fetch Error:", error);
-        setLoadingToEmptyState();
-      }
-    }
-
-    fetchData();
-  }, [filters, lecturerId, userRole, initialLoading]);
-
-  // --- NEW: handleSendEmail function to call Edge Function and update DB flags ---
+  // Handle sending email notifications with PDF letter attachment
   const handleSendEmail = async (student, absenceCount) => {
-
-    const actionType = absenceCount === 3 ? 'warning' : 'barring';
+    const actionType = absenceCount === 3 ? "warning" : "barring";
     const listToUpdate = absenceCount === 3 ? absent3 : absent6;
     const setListState = absenceCount === 3 ? setAbsent3 : setAbsent6;
-    const actionMessage = absenceCount === 3 ? 'Warning Letter Sent' : 'Exam Barring Letter Sent';
+    const actionMessage = absenceCount === 3 ? "Warning Letter Sent" : "Exam Barring Letter Sent";
 
-    // 1. Invoke the secure Supabase Edge Function
-    const subject = actionType === 'warning'
-      ? 'Attendance Warning Notice'
-      : 'Barring Notice – Excessive Absences';
+    const subject = actionType === "warning"
+      ? "Attendance Warning Notice"
+      : "Barring Notice – Excessive Absences";
 
-    const bodyText = actionType === 'warning'
-      ? `Dear ${student.name},\n\nYou have been absent 3 times in ${student.course}.\nPlease take this as an official warning.\n\nRegards,\nAcademic Affairs Office`
-      : `Dear ${student.name},\n\nYou have been absent 6 times in ${student.course}.\nAs per attendance policy, you are hereby barred from final examinations.\n\nPlease contact your course lecturer immediately.\n\nRegards,\nAcademic Affairs Office`;
+    const bodyText = actionType === "warning"
+      ? `Dear ${student.name},\n\nYou have been absent 3 times in ${student.course}.\nPlease take this as an official warning.\n\nPlease find attached the official warning letter for your reference.\n\nRegards,\nAcademic Affairs Office`
+      : `Dear ${student.name},\n\nYou have been absent 6 times in ${student.course}.\nAs per attendance policy, you are hereby barred from final examinations.\n\nPlease find attached the official barring notice for your reference.\n\nPlease contact your course lecturer immediately.\n\nRegards,\nAcademic Affairs Office`;
 
-    const { data: edgeFunctionResponse, error: invokeError } = await supabase.functions.invoke(
-      'send-email', // The name of your deployed Edge Function
-      {
-        method: 'POST',
-        body: {
-          to: student.email,
-          subject,
-          content: bodyText, // Changed from 'body' to 'content' to match Edge Function
-          student_id: student.id,
-          section_id: student.section_id,
-          email_type: actionType,
-        }
+    // Generate PDF letter
+    let pdfBase64 = null;
+    try {
+      const { generateWarningLetter, generateBarringLetter } = await import("../utils/generateLetterPDF");
+
+      const letterData = {
+        studentName: student.name,
+        matricNo: student.matric_no,
+        courseName: student.course,
+        sectionName: student.section_id,
+        absenceCount: absenceCount,
+      };
+
+      if (actionType === "warning") {
+        pdfBase64 = await generateWarningLetter(letterData);
+      } else {
+        pdfBase64 = await generateBarringLetter(letterData);
       }
-    );
+    } catch (pdfError) {
+      console.error("Failed to generate PDF letter:", pdfError);
+      // Continue without PDF if generation fails
+    }
+
+    const { error: invokeError } = await supabase.functions.invoke("send-email", {
+      method: "POST",
+      body: {
+        to: student.email,
+        subject,
+        content: bodyText,
+        student_id: student.id,
+        section_id: student.section_id,
+        email_type: actionType,
+        pdf_attachment: pdfBase64,
+        pdf_filename: actionType === "warning"
+          ? `Warning_Letter_${student.matric_no}.pdf`
+          : `Barring_Notice_${student.matric_no}.pdf`,
+      },
+    });
 
     if (invokeError) {
       console.error("EDGE FUNCTION INVOKE FAILED:", invokeError);
@@ -345,38 +186,107 @@ function AttendanceDashboard() {
       return;
     }
 
-    // 2. Optimistically update local state (remove student from the intervention list)
-    const updatedList = listToUpdate.filter(s => s.id !== student.id);
+    // Optimistically update local state
+    const updatedList = listToUpdate.filter((s) => s.id !== student.id);
     setListState(updatedList);
 
-    // 3. Update the Bar Chart counts (manually, since state changed)
+    // Update the Bar Chart counts
     const updatedAbs3Count = absenceCount === 3 ? updatedList.length : absent3.length;
     const updatedAbs6Count = absenceCount === 6 ? updatedList.length : absent6.length;
 
     setAbsenceStatusData([
       {
-        name: 'Intervention Required',
-        '3+ Absences': updatedAbs3Count,
-        '6+ Absences': updatedAbs6Count,
-      }
+        name: "Intervention Required",
+        "3+ Absences": updatedAbs3Count,
+        "6+ Absences": updatedAbs6Count,
+      },
     ]);
 
-    // Final confirmation message
     alert(`${actionMessage} successfully recorded and triggered for ${student.name}!`);
   };
 
+  const handleExportCSV = () => {
+    const selectedSection = sections.find((s) => s.id === filters.section);
+    const sectionName = selectedSection?.name || "All Sections";
 
-  // --- Render Logic ---
-  if (initialLoading || lecturerId === undefined) {
+    // Build comprehensive CSV
+    let csv = `Monthly Attendance Report - ${selectedMonthLabel}\n`;
+    csv += `Section: ${sectionName}\n`;
+    csv += `Generated: ${new Date().toLocaleString()}\n\n`;
+
+    // Summary section
+    csv += `SUMMARY\n`;
+    csv += `Total Students,${totalStudents}\n`;
+    csv += `Average Attendance,${averageAttendance}%\n`;
+    csv += `Punctuality Score,${punctualityScore}%\n`;
+    csv += `Total Present,${statusBreakdown.present}\n`;
+    csv += `Total Late,${statusBreakdown.late}\n`;
+    csv += `Total Absent,${statusBreakdown.absent}\n`;
+    csv += `Students at Warning (3+),${absent3.length}\n`;
+    csv += `Students Barred (6+),${absent6.length}\n\n`;
+
+    // Weekly trend
+    csv += `WEEKLY TREND\n`;
+    csv += `Week,Attendance %,Present,Late\n`;
+    attendanceData.forEach((row) => {
+      csv += `${row.week},${row.attendance}%,${row.present},${row.late}\n`;
+    });
+    csv += `\n`;
+
+    // Student details
+    csv += `STUDENT DETAILS\n`;
+    csv += `Matric No,Name,Present,Late,Absent,Attendance %,Status\n`;
+    allStudentsReport.forEach((s) => {
+      csv += `${s.matric_no},${s.name},${s.present},${s.late},${s.absent},${s.percentage}%,${s.status}\n`;
+    });
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `attendance_report_${selectedMonthLabel.replace(/ /g, '_')}.csv`;
+    a.click();
+  };
+
+  const handleExportPDF = async () => {
+    // Dynamic import - only load PDF library when needed
+    const { generateAndDownloadReport } = await import("../utils/generateReport");
+
+    const selectedSection = sections.find((s) => s.id === filters.section);
+
+    generateAndDownloadReport({
+      title: `Monthly Attendance Report`,
+      sectionName: selectedSection?.name || "All Sections",
+      courseName: selectedSection?.courses?.name || "",
+      dateRange: selectedMonthLabel,
+      summary: {
+        totalStudents: totalStudents || 0,
+        averageAttendance: averageAttendance || 0,
+        totalClasses: attendanceData.reduce((sum, w) => sum + w.present + w.late, 0),
+        atRisk: absent3.length + absent6.length,
+      },
+      students: allStudentsReport,
+      fileName: `attendance_report_${selectedMonthLabel.replace(/ /g, '_')}.pdf`,
+    });
+  };
+
+  // Loading state
+  if (userLoading || lecturerId === undefined) {
     return (
       <DashboardLayout>
-        <div className="text-center py-20 text-xl font-semibold text-sky-600">Loading user permissions...</div>
+        <div className="flex items-center justify-center min-h-[500px]">
+          <div className="text-center">
+            <div className="w-12 h-12 border-4 border-teal-100 border-t-teal-500 rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-slate-500 font-medium">Loading analysis data...</p>
+          </div>
+        </div>
       </DashboardLayout>
     );
   }
 
   // Unauthorized Lecturer
-  if (userRole === 'lecturer' && lecturerId === null) {
+  if (userRole === "lecturer" && lecturerId === null) {
     return (
       <DashboardLayout>
         <div className="flex flex-col items-center justify-center py-20 min-h-[500px]">
@@ -393,7 +303,7 @@ function AttendanceDashboard() {
   }
 
   // Student role check
-  if (userRole === 'student') {
+  if (userRole === "student") {
     return (
       <DashboardLayout>
         <div className="text-center py-20 text-xl font-semibold text-gray-500">
@@ -403,231 +313,431 @@ function AttendanceDashboard() {
     );
   }
 
-
-  const handleExportCSV = () => {
-    const headers = "Week,Attendance Percentage\n";
-    const rows = attendanceData
-      .map((row) => `${row.week},${row.attendance}`)
-      .join("\n");
-    const csv = headers + rows;
-
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "attendance_report.csv";
-    a.click();
+  // Define chart colors matching theme
+  const CHART_COLORS = {
+    teal: "#14b8a6", // teal-500
+    cyan: "#06b6d4", // cyan-500
+    emerald: "#10b981", // emerald-500
+    rose: "#f43f5e", // rose-500
+    amber: "#f59e0b", // amber-500
   };
-
 
   return (
     <DashboardLayout>
-      <div className="min-h-screen p-6 space-y-6 bg-[#e6f0fb] text-slate-700">
-        <h1 className="text-2xl font-semibold sm:mr-4 bg-gradient-to-r from-indigo-600 via-sky-600 to-teal-600 bg-clip-text text-transparent">
-          📊 Attendance Analysis Report
-        </h1>
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/50 backdrop-blur-md rounded-xl p-4 shadow-md border border-slate-200">
+      <div className="min-h-screen p-2 space-y-6">
 
+        {/* Header Section */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-800">Attendance Analysis</h1>
+            <p className="text-slate-500 text-sm">
+              {filters.section
+                ? `Viewing: ${sections.find(s => s.id === filters.section)?.name || 'Selected Section'}`
+                : 'Real-time performance metrics and risk monitoring'}
+            </p>
+          </div>
 
-          <div className="flex flex-wrap gap-2 items-center flex-1">
-            {/* Section Dropdown (Primary filter) */}
+          {/* Quick Section Pills */}
+          {sections.length > 1 && (
+            <div className="flex flex-wrap gap-2">
+              {sections.slice(0, 5).map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setFilters({ ...filters, section: s.id })}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filters.section === s.id
+                    ? 'bg-teal-500 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                >
+                  {s.name.split(' - ')[0]}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Filters & Actions Bar */}
+          <div className="flex flex-wrap items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm">
             <select
-              className="px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white/80 focus:ring-2 focus:ring-indigo-400 focus:outline-none"
-              onChange={(e) => setFilters({ ...filters, section: e.target.value })}>
-              <option value="">Filter by Section</option>
-              {sections.map(s => (
+              className="px-3 py-2 rounded-lg border-0 bg-slate-50 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-teal-500 outline-none hover:bg-slate-100 transition min-w-[180px]"
+              value={filters.section}
+              onChange={(e) => setFilters({ ...filters, section: e.target.value })}
+            >
+              <option value="">All Sections</option>
+              {sections.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
-
+            <select
+              className="px-3 py-2 rounded-lg border-0 bg-slate-50 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-teal-500 outline-none hover:bg-slate-100 transition min-w-[150px]"
+              value={filters.month}
+              onChange={(e) => setFilters({ ...filters, month: e.target.value })}
+            >
+              <option value="">All Time</option>
+              {availableMonths?.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+            <div className="h-6 w-px bg-slate-200 mx-1"></div>
             <Button
               onClick={handleExportCSV}
-              className="flex items-center gap-2 bg-gradient-to-r from-teal-500 to-indigo-500 hover:scale-[1.03] text-white rounded-xl text-sm px-4 py-2"
+              className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-sm rounded-lg text-xs font-medium px-3 py-2 h-auto"
             >
-              <Download className="w-4 h-4" /> Export Report Data
+              <Download className="w-3.5 h-3.5" /> CSV
+            </Button>
+            <Button
+              onClick={handleExportPDF}
+              className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-medium px-3 py-2 h-auto shadow-sm"
+            >
+              <Download className="w-3.5 h-3.5" /> PDF Report
             </Button>
           </div>
         </div>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Card className="shadow-md hover:shadow-lg transition-all">
-            <CardHeader className="flex items-center justify-between">
-              <CardTitle>Overall Attendance</CardTitle>
-              <BarChart2 className="w-5 h-5 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold text-blue-600">{averageAttendance}%</p>
-              <p className="text-sm text-gray-500 mt-1">Average across filtered period</p>
+        {/* KPI Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="bg-white shadow-sm border border-slate-100">
+            <CardContent className="p-6 flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-500 mb-1">Average Attendance</p>
+                <h3 className="text-3xl font-bold text-slate-800">{averageAttendance}%</h3>
+                <p className="text-xs text-emerald-600 font-medium mt-1 flex items-center gap-1">
+                  <CheckCircle className="w-3 h-3" /> Target: {ATTENDANCE_GOAL}%
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center">
+                <BarChart2 className="w-5 h-5 text-teal-600" />
+              </div>
             </CardContent>
           </Card>
 
-          <Card className="shadow-md hover:shadow-lg transition-all">
-            <CardHeader className="flex items-center justify-between">
-              <CardTitle>Total Students</CardTitle>
-              <Users className="w-5 h-5 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold text-green-600">{totalStudents}</p>
-              <p className="text-sm text-gray-500 mt-1">Total enrolled students</p>
+          <Card className="bg-white shadow-sm border border-slate-100">
+            <CardContent className="p-6 flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-500 mb-1">Punctuality Score</p>
+                <h3 className={`text-3xl font-bold ${punctualityScore >= 80 ? "text-emerald-600" : punctualityScore >= 60 ? "text-amber-600" : "text-rose-600"}`}>
+                  {punctualityScore}%
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">On-time arrivals</p>
+              </div>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${punctualityScore >= 80 ? "bg-emerald-50" : punctualityScore >= 60 ? "bg-amber-50" : "bg-rose-50"}`}>
+                <Clock className={`w-5 h-5 ${punctualityScore >= 80 ? "text-emerald-600" : punctualityScore >= 60 ? "text-amber-600" : "text-rose-600"}`} />
+              </div>
             </CardContent>
           </Card>
 
-          <Card className="shadow-md hover:shadow-lg transition-all">
-            <CardHeader className="flex items-center justify-between">
-              <CardTitle>Weekly Trend</CardTitle>
-              <TrendingUp className="w-5 h-5 text-yellow-600" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold text-yellow-600">{trendDifference}%</p>
-              <p className="text-sm text-gray-500 mt-1">Change from previous week</p>
+          <Card className="bg-white shadow-sm border border-slate-100">
+            <CardContent className="p-6 flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-500 mb-1">Total Enrollment</p>
+                <h3 className="text-3xl font-bold text-slate-800">{totalStudents}</h3>
+                <p className="text-xs text-slate-400 mt-1">Active students</p>
+              </div>
+              <div className="w-10 h-10 bg-cyan-50 rounded-xl flex items-center justify-center">
+                <Users className="w-5 h-5 text-cyan-600" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white shadow-sm border border-slate-100">
+            <CardContent className="p-6 flex items-start justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-500 mb-1">Weekly Trend</p>
+                <h3 className={`text-3xl font-bold ${trendDifference >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                  {trendDifference > 0 ? "+" : ""}{trendDifference}%
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">vs. last week</p>
+              </div>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${trendDifference >= 0 ? "bg-emerald-50" : "bg-rose-50"}`}>
+                <TrendingUp className={`w-5 h-5 ${trendDifference >= 0 ? "text-emerald-600" : "text-rose-600"}`} />
+              </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Charts & Absence Lists */}
-        <div className="grid lg:grid-cols-3 gap-4">
-          {/* Line Chart: Percentage Trend with Goal Line */}
-          <Card className="lg:col-span-2 shadow-md">
-            <CardHeader>
-              <CardTitle>Attendance Performance Over Time</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={attendanceData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="week" />
-                  <YAxis domain={[50, 100]} unit="%" />
-                  <Tooltip formatter={(value, name) => [name === 'goal' ? `${value}% Target` : `${value}%`, name]} />
+        {/* Main Charts Area */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-                  {/* Goal Line */}
-                  <Line
-                    type="monotone"
-                    dataKey="goal"
-                    stroke="#EF4444" // Red color
-                    strokeWidth={2}
-                    strokeDasharray="3 3"
-                    dot={false}
-                    isAnimationActive={false}
-                  />
-                  {/* Actual Attendance Line */}
-                  <Line
-                    type="monotone"
-                    dataKey="attendance"
-                    stroke="#2563eb"
-                    strokeWidth={3}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-              <p className="text-sm text-gray-500 mt-2 text-center">Red line indicates the {ATTENDANCE_GOAL}% performance target.</p>
+          {/* Left: Trend Line Chart */}
+          <Card className="lg:col-span-2 bg-white shadow-sm border border-slate-100">
+            <CardHeader className="pb-2 border-b border-slate-50">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base font-semibold text-slate-800">
+                  Attendance Trend - {selectedMonthLabel}
+                </CardTitle>
+                {attendanceData.some(d => d.isPartial) && (
+                  <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-lg">
+                    * Current week (in progress)
+                  </span>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="h-[300px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={attendanceData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis
+                      dataKey="week"
+                      tick={{ fontSize: 12, fill: '#64748b' }}
+                      axisLine={false}
+                      tickLine={false}
+                      dy={10}
+                    />
+                    <YAxis
+                      domain={[0, 100]}
+                      unit="%"
+                      tick={{ fontSize: 12, fill: '#64748b' }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                      formatter={(value, name) => [name === "goal" ? `${value}% Target` : `${value}%`, name === "goal" ? "Goal" : "Actual"]}
+                    />
+                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                    <Line
+                      type="monotone"
+                      dataKey="goal"
+                      stroke="#cbd5e1"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      dot={false}
+                      name="Goal (80%)"
+                      activeDot={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="attendance"
+                      stroke={CHART_COLORS.teal}
+                      strokeWidth={3}
+                      dot={{ r: 4, fill: CHART_COLORS.teal, strokeWidth: 2, stroke: '#fff' }}
+                      activeDot={{ r: 6, fill: CHART_COLORS.teal }}
+                      name="Attendance"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             </CardContent>
           </Card>
 
-          {/* Absence Lists (Actionable: Filtered by Section) */}
-          <Card className="shadow-md">
-            <CardHeader>
-              <CardTitle>3 Absences ({filters.section ? 'Filtered' : 'Select Section'})</CardTitle>
+          {/* Right: Intervention Bar Chart */}
+          <Card className="bg-white shadow-sm border border-slate-100">
+            <CardHeader className="pb-2 border-b border-slate-50">
+              <CardTitle className="text-base font-semibold text-slate-800">At-Risk Summary</CardTitle>
             </CardHeader>
-            <CardContent>
-              {filters.section && absent3.length > 0 ? (
-                <ul className="space-y-2">
+            <CardContent className="p-6">
+              <div className="h-[300px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={absenceStatusData} layout="vertical" margin={{ left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" />
+                    <XAxis type="number" hide />
+                    <YAxis dataKey="name" type="category" hide width={10} />
+                    <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                    <Bar
+                      dataKey="3+ Absences"
+                      fill={CHART_COLORS.amber}
+                      name="Warning (3+)"
+                      radius={[0, 4, 4, 0]}
+                      barSize={30}
+                      label={{ position: 'right', fill: '#64748b', fontSize: 12 }}
+                    />
+                    <Bar
+                      dataKey="6+ Absences"
+                      fill={CHART_COLORS.rose}
+                      name="Barred (6+)"
+                      radius={[0, 4, 4, 0]}
+                      barSize={30}
+                      label={{ position: 'right', fill: '#64748b', fontSize: 12 }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Action Lists: Warnings & Barring */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+          {/* Warnings List */}
+          <Card className="bg-white shadow-sm border border-slate-100 flex flex-col h-full">
+            <CardHeader className="pb-3 border-b border-slate-50 bg-amber-50/50 rounded-t-2xl">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-500" />
+                <CardTitle className="text-base font-semibold text-slate-800">
+                  Warning Required (3 Absences)
+                </CardTitle>
+                <span className="ml-auto bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                  {absent3.length}
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0 flex-1">
+              {absent3.length > 0 ? (
+                <div className="divide-y divide-slate-50 max-h-[300px] overflow-y-auto">
                   {absent3.map((s) => (
-                    <li
-                      key={s.id}
-                      className="flex justify-between items-center bg-white/70 backdrop-blur-md p-2 rounded-xl border border-slate-200"
-                    >
+                    <div key={s.id} className="p-4 hover:bg-slate-50 transition flex items-center justify-between group">
                       <div>
-                        <p className="font-medium">{s.name}</p>
-                        <p className="text-sm text-slate-500">
-                          {s.course} | Section: {s.section_id} {/* Display Section ID */}
-                        </p>
+                        <p className="font-medium text-slate-800 text-sm">{s.name}</p>
+                        <p className="text-xs text-slate-500">{s.matric_no} • {s.section_id}</p>
                       </div>
                       <Button
                         size="sm"
                         onClick={() => handleSendEmail(s, 3)}
-                        className="flex items-center gap-1 bg-gradient-to-r from-teal-500 to-indigo-500 text-white rounded-lg px-3 py-1"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity bg-white hover:bg-amber-50 text-amber-600 border border-amber-200 shadow-sm h-8 text-xs"
                       >
-                        <Mail className="w-4 h-4" /> Notify
+                        Send Warning
                       </Button>
-                    </li>
+                    </div>
                   ))}
-                </ul>
+                </div>
               ) : (
-                <p className="text-gray-500">
-                  {filters.section ? `✅ No alerts for Section ${filters.section}` : 'Please select a section to view actionable alerts.'}
-                </p>
+                <div className="flex flex-col items-center justify-center h-40 text-slate-400">
+                  <CheckCircle className="w-8 h-8 mb-2 opacity-20" />
+                  <p className="text-sm">No warnings pending</p>
+                </div>
               )}
             </CardContent>
           </Card>
-        </div>
 
-        <div className="grid lg:grid-cols-3 gap-4">
-          <Card className="shadow-md">
-            <CardHeader>
-              <CardTitle>6 Absences ({filters.section ? 'Filtered' : 'Select Section'})</CardTitle>
+          {/* Barring List */}
+          <Card className="bg-white shadow-sm border border-slate-100 flex flex-col h-full">
+            <CardHeader className="pb-3 border-b border-slate-50 bg-rose-50/50 rounded-t-2xl">
+              <div className="flex items-center gap-2">
+                <XCircle className="w-5 h-5 text-rose-500" />
+                <CardTitle className="text-base font-semibold text-slate-800">
+                  Action Required (6+ Absences)
+                </CardTitle>
+                <span className="ml-auto bg-rose-100 text-rose-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                  {absent6.length}
+                </span>
+              </div>
             </CardHeader>
-            <CardContent>
-              {filters.section && absent6.length > 0 ? (
-                <ul className="space-y-2">
+            <CardContent className="p-0 flex-1">
+              {absent6.length > 0 ? (
+                <div className="divide-y divide-slate-50 max-h-[300px] overflow-y-auto">
                   {absent6.map((s) => (
-                    <li
-                      key={s.id}
-                      className="flex justify-between items-center bg-white/70 backdrop-blur-md p-2 rounded-xl border border-slate-200"
-                    >
+                    <div key={s.id} className="p-4 hover:bg-slate-50 transition flex items-center justify-between group">
                       <div>
-                        <p className="font-medium">{s.name}</p>
-                        <p className="text-sm text-slate-500">
-                          {s.course} | Section: {s.section_id} {/* Display Section ID */}
-                        </p>
+                        <p className="font-medium text-slate-800 text-sm">{s.name}</p>
+                        <p className="text-xs text-slate-500">{s.matric_no} • {s.section_id}</p>
                       </div>
                       <Button
                         size="sm"
                         onClick={() => handleSendEmail(s, 6)}
-                        className="flex items-center gap-1 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-lg px-3 py-1"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity bg-rose-500 hover:bg-rose-600 text-white shadow-sm h-8 text-xs border border-transparent"
                       >
-                        <Mail className="w-4 h-4" /> Warn
+                        Send Barring Notice
                       </Button>
-                    </li>
+                    </div>
                   ))}
-                </ul>
+                </div>
               ) : (
-                <p className="text-gray-500">
-                  {filters.section ? `✅ No alerts for Section ${filters.section}` : 'Please select a section to view actionable alerts.'}
-                </p>
+                <div className="flex flex-col items-center justify-center h-40 text-slate-400">
+                  <CheckCircle className="w-8 h-8 mb-2 opacity-20" />
+                  <p className="text-sm">No barring actions pending</p>
+                </div>
               )}
             </CardContent>
           </Card>
+        </div>
 
-          {/* New Bar Chart: Absence Status Comparison */}
-          <Card className="lg:col-span-2 shadow-md">
-            <CardHeader>
-              <CardTitle>Intervention Status</CardTitle>
-              <p className="text-xs text-gray-500">Students requiring 3+ or 6+ absence intervention.</p>
+        {/* Status Breakdown & Chronic Late */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+          {/* Status Breakdown Pie Chart */}
+          <Card className="bg-white shadow-sm border border-slate-100">
+            <CardHeader className="pb-2 border-b border-slate-50">
+              <CardTitle className="text-base font-semibold text-slate-800">Attendance Breakdown</CardTitle>
             </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={absenceStatusData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis allowDecimals={false} label={{ value: 'Students', angle: -90, position: 'insideLeft' }} />
-                  <Tooltip
-                    formatter={(value, name) => [value, name]}
-                    cursor={{ fill: 'rgba(0, 0, 0, 0.05)' }}
-                  />
-                  <Legend />
+            <CardContent className="p-6">
+              <div className="h-[250px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: "On Time", value: statusBreakdown.present, color: CHART_COLORS.emerald },
+                        { name: "Late", value: statusBreakdown.late, color: CHART_COLORS.amber },
+                        { name: "Absent", value: statusBreakdown.absent, color: CHART_COLORS.rose },
+                      ].filter(d => d.value > 0)}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={80}
+                      paddingAngle={2}
+                      dataKey="value"
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {[
+                        { name: "On Time", value: statusBreakdown.present, color: CHART_COLORS.emerald },
+                        { name: "Late", value: statusBreakdown.late, color: CHART_COLORS.amber },
+                        { name: "Absent", value: statusBreakdown.absent, color: CHART_COLORS.rose },
+                      ].filter(d => d.value > 0).map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="grid grid-cols-3 gap-2 mt-4 text-center">
+                <div className="bg-emerald-50 rounded-lg p-2">
+                  <p className="text-lg font-bold text-emerald-600">{statusBreakdown.present}</p>
+                  <p className="text-xs text-slate-500">On Time</p>
+                </div>
+                <div className="bg-amber-50 rounded-lg p-2">
+                  <p className="text-lg font-bold text-amber-600">{statusBreakdown.late}</p>
+                  <p className="text-xs text-slate-500">Late</p>
+                </div>
+                <div className="bg-rose-50 rounded-lg p-2">
+                  <p className="text-lg font-bold text-rose-600">{statusBreakdown.absent}</p>
+                  <p className="text-xs text-slate-500">Absent</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-                  {/* Bar for 3 Absences (Warning) */}
-                  <Bar dataKey="3+ Absences" fill="#facc15" name="3+ Absences (Warning)" radius={[6, 6, 0, 0]} />
-
-                  {/* Bar for 6 Absences (Barring) */}
-                  <Bar dataKey="6+ Absences" fill="#ef4444" name="6+ Absences (Barring)" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+          {/* Chronic Late Arrivers */}
+          <Card className="bg-white shadow-sm border border-slate-100 flex flex-col h-full">
+            <CardHeader className="pb-3 border-b border-slate-50 bg-orange-50/50 rounded-t-2xl">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-orange-500" />
+                <CardTitle className="text-base font-semibold text-slate-800">
+                  Chronic Late Arrivers (3+ times)
+                </CardTitle>
+                <span className="ml-auto bg-orange-100 text-orange-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                  {chronicLate.length}
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0 flex-1">
+              {chronicLate.length > 0 ? (
+                <div className="divide-y divide-slate-50 max-h-[300px] overflow-y-auto">
+                  {chronicLate.map((s) => (
+                    <div key={s.id} className="p-4 hover:bg-slate-50 transition flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-slate-800 text-sm">{s.name}</p>
+                        <p className="text-xs text-slate-500">{s.email}</p>
+                      </div>
+                      <span className="bg-orange-100 text-orange-700 text-xs font-bold px-2.5 py-1 rounded-full">
+                        {s.count} times late
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-40 text-slate-400">
+                  <CheckCircle className="w-8 h-8 mb-2 opacity-20" />
+                  <p className="text-sm">No chronic late arrivers</p>
+                  <p className="text-xs mt-1">Select a section to view data</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
+
       </div>
     </DashboardLayout>
   );

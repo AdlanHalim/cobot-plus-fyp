@@ -1,29 +1,49 @@
-// pages/_app.js
+/**
+ * @file _app.js
+ * @location cobot-plus-fyp/pages/_app.js
+ * 
+ * @description
+ * Next.js custom App component for the CObot+ Attendance System.
+ * Wraps all pages with Supabase session provider and UserProvider.
+ * 
+ * Key responsibilities:
+ * - Initialize Supabase client for client-side usage
+ * - Provide session context via SessionContextProvider
+ * - Provide user profile/role context via UserProvider (fetched once)
+ * - Import global CSS styles
+ * 
+ * Performance optimizations:
+ * - Removed getInitialProps to enable client-side navigation
+ * - Centralized user profile fetching in UserProvider
+ * 
+ * @see https://nextjs.org/docs/advanced-features/custom-app
+ */
+
 import { useState, useEffect } from 'react';
 import { SessionContextProvider } from '@supabase/auth-helpers-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { loadConfig } from "@/utils/config";
 
+// Global stylesheet imports
 import '../styles/globals.css';
 import '../styles/Navbar.module.css';
 import '../styles/login.css';
 import '../styles/signup.css';
 import '../styles/manage-roles.css';
 
-
-// Define a function to create the client that will be used inside the component
-// The client will be created only once within the functional component's scope.
+/**
+ * Factory function to create Supabase client.
+ * Called once per component lifecycle to ensure single instance.
+ */
 const createSupabaseClient = () => createClientComponentClient();
 
+/**
+ * Custom App Component
+ * All pages in the application are wrapped by this component.
+ */
 function MyApp({ Component, pageProps }) {
   const [ready, setReady] = useState(false);
-
-  // Create or retrieve the client instance using useState
   const [supabaseClient] = useState(createSupabaseClient);
-
-
-  console.log('SUPABASE URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
-  console.log('SUPABASE ANON KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.substring(0, 20) + '...');
 
   // Config loader for the app (e.g., dynamic API base URL)
   useEffect(() => {
@@ -40,7 +60,6 @@ function MyApp({ Component, pageProps }) {
   }
 
   return (
-    // Pass the client and the initial session prop
     <SessionContextProvider
       supabaseClient={supabaseClient}
       initialSession={pageProps.initialSession}
@@ -50,28 +69,12 @@ function MyApp({ Component, pageProps }) {
   );
 }
 
-// 🔑 DEFINITIVE FIX: Create the client locally inside getInitialProps 
-// to ensure it correctly parses the server-side cookies (req/res).
-MyApp.getInitialProps = async ({ ctx }) => {
-
-  const supabaseServerClient = createClientComponentClient({ req: ctx.req, res: ctx.res });
-
-  // 1. Fetch user data using the server-aware client
-  const { data: { session } } = await supabaseServerClient.auth.getSession();
-
-  // 2. Return the props
-  return {
-    pageProps: {
-      // This session object is what prevents the component from seeing a null session on first render.
-      initialSession: session || null,
-    }
-  };
-};
-
 export default MyApp;
 
-
-// A modern helper function to get the current logged-in user
+/**
+ * Helper function to get the current logged-in user.
+ * @returns {Promise<User|null>} Current user or null
+ */
 export async function getCurrentUser() {
   const supabase = createClientComponentClient();
   const { data: { user } } = await supabase.auth.getUser();

@@ -44,11 +44,14 @@ const Navbar = () => {
     // Roles now match the exact text values in your database constraint
     { href: "/", label: "Dashboard", roles: ["student", "lecturer", "admin"] },
     { href: "/add-student1", label: "Add Student", roles: ["lecturer", "admin"] },
-    { href: "/manage-student", label: "Manage Student", roles: [ "admin"] },
+    { href: "/manage-student", label: "Manage Student", roles: ["admin"] },
     { href: "/manage-course", label: "Manage Course", roles: ["admin"] },
     { href: "/analysis", label: "Analysis", roles: ["student", "lecturer", "admin"] },
-    { href: "/manage-roles", label: "User Roles", roles: ["admin"] },
     { href: "/student-view", label: "Student Records", roles: ["admin", "student"] },
+    { href: "/submit-excuse", label: "Submit Excuse", roles: ["student"] },
+    { href: "/manage-excuses", label: "Excuses", roles: ["admin", "lecturer"] },
+    { href: "/manage-roles", label: "User Roles", roles: ["admin"] },
+    { href: "/settings", label: "Settings", roles: ["admin"] },
   ];
 
   // --- FIX: Use the role text directly from the fetched profile ---
@@ -84,11 +87,10 @@ const Navbar = () => {
               <Link
                 key={href}
                 href={href}
-                className={`text-sm font-medium transition-all duration-300 hover:text-blue-200 ${
-                  router.pathname === href
+                className={`text-sm font-medium transition-all duration-300 hover:text-blue-200 ${router.pathname === href
                     ? "text-blue-100 font-semibold border-b-2 border-blue-300 pb-1"
                     : "text-blue-50"
-                }`}
+                  }`}
               >
                 {label}
               </Link>
@@ -123,11 +125,10 @@ const Navbar = () => {
                 key={href}
                 href={href}
                 onClick={() => setMenuOpen(false)}
-                className={`block py-2 px-3 rounded-lg text-sm transition-all duration-300 hover:bg-blue-600/50 ${
-                  router.pathname === href
+                className={`block py-2 px-3 rounded-lg text-sm transition-all duration-300 hover:bg-blue-600/50 ${router.pathname === href
                     ? "bg-blue-600/40 font-semibold text-blue-50"
                     : ""
-                }`}
+                  }`}
               >
                 {label}
               </Link>

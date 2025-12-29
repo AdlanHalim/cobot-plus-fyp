@@ -1,9 +1,27 @@
+/**
+ * @file button.jsx
+ * @location cobot-plus-fyp/components/ui/button.jsx
+ * 
+ * @description
+ * Reusable Button component built with shadcn/ui and class-variance-authority.
+ * Provides consistent button styling across the application.
+ * 
+ * @see https://ui.shadcn.com/docs/components/button
+ * 
+ * Variants: default, destructive, outline, secondary, ghost, link
+ * Sizes: default, sm, lg, icon
+ */
+
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { cva } from "class-variance-authority";
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Button variant styles using class-variance-authority (cva).
+ * Enables type-safe variant and size props with Tailwind classes.
+ */
 const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
