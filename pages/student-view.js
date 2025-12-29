@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useState } from "react";
-import DashboardLayout from "@/components/DashboardLayout"; 
+import DashboardLayout from "@/components/DashboardLayout";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { motion } from "framer-motion";
-import { AlertTriangle, CheckCircle, Clock, Search, User, Mail, Calendar as CalendarIcon, List } from 'lucide-react'; 
-import Calendar from 'react-calendar'; 
-import 'react-calendar/dist/Calendar.css'; 
+import withRole from "../utils/withRole"; // Import the HOC for role access control
+import { AlertTriangle, CheckCircle, Clock, Search, User, Mail, Calendar as CalendarIcon, List } from 'lucide-react';
+import Calendar from 'react-calendar';
+import 'react-calendar/dist/Calendar.css';
 
 // ✅ INLINED TABLE COMPONENT DEFINITIONS START 
 const Table = ({ children }) => (
@@ -52,7 +53,7 @@ const AttendanceCalendar = ({ attendanceRecords }) => {
   const attendanceMap = attendanceRecords.reduce((acc, record) => {
     const classDate = record.class_sessions?.class_date;
     if (!classDate) return acc;
-    
+
     const date = new Date(classDate).toISOString().split('T')[0];
     if (!acc.has(date)) {
       acc.set(date, []);
@@ -77,14 +78,14 @@ const AttendanceCalendar = ({ attendanceRecords }) => {
     }
     return null;
   };
-  
+
   return (
     <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 shadow-inner">
-        <h4 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-            <CalendarIcon className="w-4 h-4"/>
-            Attendance Overview by Date (Highest priority status shown)
-        </h4>
-        <style jsx global>{`
+      <h4 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+        <CalendarIcon className="w-4 h-4" />
+        Attendance Overview by Date (Highest priority status shown)
+      </h4>
+      <style jsx global>{`
           /* Custom styles for the calendar view */
           .react-calendar {
             border-radius: 12px;
@@ -110,10 +111,10 @@ const AttendanceCalendar = ({ attendanceRecords }) => {
             font-weight: 700;
           }
         `}</style>
-        <Calendar 
-            tileClassName={tileClassName}
-            className="w-full border-none p-2"
-        />
+      <Calendar
+        tileClassName={tileClassName}
+        className="w-full border-none p-2"
+      />
     </div>
   );
 };
@@ -123,11 +124,11 @@ const AttendanceCalendar = ({ attendanceRecords }) => {
 function StudentView() {
   const [matricNo, setMatricNo] = useState("");
   const [studentData, setStudentData] = useState(null);
-  const [allAttendanceRecords, setAllAttendanceRecords] = useState([]); 
+  const [allAttendanceRecords, setAllAttendanceRecords] = useState([]);
   const [totalAbsences, setTotalAbsences] = useState(0);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [activeTab, setActiveTab] = useState('calendar'); 
+  const [activeTab, setActiveTab] = useState('calendar');
 
   const getStatusIcon = (status) => {
     switch (status) {
@@ -148,7 +149,7 @@ function StudentView() {
     setStudentData(null);
     setAllAttendanceRecords([]);
     setTotalAbsences(0);
-    setActiveTab('calendar'); 
+    setActiveTab('calendar');
 
     if (!supabase) {
       setMessage("❌ Database connection failed. Please check environment variables.");
@@ -167,7 +168,7 @@ function StudentView() {
       // 1. Find Student ID and details using matric_no
       const { data: student, error: studentError } = await supabase
         .from("students")
-        .select("id, name, nickname, matric_no, email") 
+        .select("id, name, nickname, matric_no, email")
         .eq("matric_no", trimmedMatricNo)
         .single();
 
@@ -177,9 +178,9 @@ function StudentView() {
         setLoading(false);
         return;
       }
-      
+
       setStudentData(student);
-      
+
       // 2. Fetch ALL attendance records for the student.
       const { data: records, error: recordsError } = await supabase
         .from("attendance_records")
@@ -195,7 +196,7 @@ function StudentView() {
           )
         `)
         .eq("student_id", student.id)
-        .order("timestamp", { ascending: false }); 
+        .order("timestamp", { ascending: false });
 
       if (recordsError) {
         console.error("Attendance Records Fetch Error:", recordsError.message);
@@ -203,7 +204,7 @@ function StudentView() {
         setLoading(false);
         return;
       }
-      
+
       const recordsArray = records || [];
       const calculatedAbsences = recordsArray.filter(r => r.status === 'absent').length;
 
@@ -220,11 +221,11 @@ function StudentView() {
     }
   };
 
-  
+
   return (
-    <DashboardLayout> 
+    <DashboardLayout>
       <div className="flex flex-col items-center justify-start py-8 min-h-screen bg-slate-100">
-        
+
         <motion.div
           className="w-full max-w-5xl bg-white/90 backdrop-blur-md border border-slate-200/50 rounded-3xl shadow-2xl p-8 space-y-8"
           initial={{ opacity: 0, y: 20 }}
@@ -262,112 +263,112 @@ function StudentView() {
 
           {/* Results Display */}
           {studentData && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8 pt-4">
-                  
-                  {/* Student Header with Combined Summary */}
-                  <div className="flex flex-col sm:flex-row items-start justify-between gap-4 p-4 bg-indigo-50 rounded-xl shadow-md border-l-4 border-indigo-500">
-                    <div className="flex items-start gap-3">
-                        <User className="w-7 h-7 text-indigo-600 flex-shrink-0" />
-                        <div>
-                            <h2 className="text-xl font-bold text-slate-800">
-                              {studentData.name}
-                            </h2>
-                            <p className="text-sm text-indigo-700 font-medium">
-                              Matric No: {studentData.matric_no} 
-                              {studentData.email && <span className="ml-4 flex items-center gap-1 text-slate-500"><Mail className="w-3 h-3"/>{studentData.email}</span>}
-                            </p>
-                        </div>
-                    </div>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8 pt-4">
 
-                    {/* Total Absences & Warning (Moved here) */}
-                    <div className="flex flex-col items-end sm:items-center p-2 bg-white rounded-lg shadow-inner border border-slate-100">
-                        <div className="flex items-center gap-2">
-                            <span className={`text-2xl font-extrabold ${totalAbsences >= 5 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                {totalAbsences}
-                            </span>
-                            <p className="text-sm text-slate-700 font-medium whitespace-nowrap">
-                                Total Absences
-                            </p>
-                        </div>
-                        <span className={`text-xs mt-1 font-semibold ${totalAbsences >= 5 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                           {totalAbsences >= 5 ? '⚠️ High risk of warning.' : 'Attendance: Good.'}
-                        </span>
-                    </div>
+              {/* Student Header with Combined Summary */}
+              <div className="flex flex-col sm:flex-row items-start justify-between gap-4 p-4 bg-indigo-50 rounded-xl shadow-md border-l-4 border-indigo-500">
+                <div className="flex items-start gap-3">
+                  <User className="w-7 h-7 text-indigo-600 flex-shrink-0" />
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-800">
+                      {studentData.name}
+                    </h2>
+                    <p className="text-sm text-indigo-700 font-medium">
+                      Matric No: {studentData.matric_no}
+                      {studentData.email && <span className="ml-4 flex items-center gap-1 text-slate-500"><Mail className="w-3 h-3" />{studentData.email}</span>}
+                    </p>
                   </div>
+                </div>
 
-                  {/* Tab Navigation */}
-                  <div className="flex border-b border-slate-200">
-                    <button
-                      onClick={() => setActiveTab('calendar')}
-                      className={`px-6 py-3 text-sm font-medium transition duration-200 flex items-center gap-2 ${activeTab === 'calendar' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                      <CalendarIcon className="w-4 h-4" />
-                      Calendar View
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('table')}
-                      className={`px-6 py-3 text-sm font-medium transition duration-200 flex items-center gap-2 ${activeTab === 'table' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                      <List className="w-4 h-4" />
-                      Detailed Log Table ({allAttendanceRecords.length})
-                    </button>
+                {/* Total Absences & Warning (Moved here) */}
+                <div className="flex flex-col items-end sm:items-center p-2 bg-white rounded-lg shadow-inner border border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-2xl font-extrabold ${totalAbsences >= 5 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      {totalAbsences}
+                    </span>
+                    <p className="text-sm text-slate-700 font-medium whitespace-nowrap">
+                      Total Absences
+                    </p>
                   </div>
-                  
-                  {/* Tab Content */}
-                  <div className="pt-4">
-                      {activeTab === 'calendar' && <AttendanceCalendar attendanceRecords={allAttendanceRecords} />}
-                      
-                      {activeTab === 'table' && (
-                          <div className="overflow-x-auto max-h-96 border border-slate-200 rounded-xl shadow-inner">
-                              <Table>
-                                  <TableHeader className="bg-slate-100 sticky top-0 shadow-sm z-10">
-                                      <TableRow>
-                                          <TableHead className="w-[150px]">Date</TableHead>
-                                          <TableHead className="w-[150px]">Status</TableHead>
-                                          <TableHead>Course</TableHead>
-                                          <TableHead>Section</TableHead>
-                                          <TableHead>Time Recorded</TableHead>
-                                      </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                      {allAttendanceRecords.length > 0 ? (
-                                          allAttendanceRecords.map((record, index) => {
-                                              const session = record.class_sessions;
-                                              const section = session?.sections;
-                                              const course = section?.courses;
+                  <span className={`text-xs mt-1 font-semibold ${totalAbsences >= 5 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                    {totalAbsences >= 5 ? '⚠️ High risk of warning.' : 'Attendance: Good.'}
+                  </span>
+                </div>
+              </div>
 
-                                              return (
-                                                  <TableRow key={index} className="transition duration-100 ease-in-out">
-                                                      <TableCell className="font-medium text-slate-700">
-                                                          {session?.class_date ? new Date(session.class_date).toLocaleDateString() : 'N/A'}
-                                                      </TableCell>
-                                                      <TableCell className="flex items-center gap-2 capitalize">
-                                                          {getStatusIcon(record.status)}
-                                                          <span className={`font-semibold ${record.status === 'absent' ? 'text-rose-600' : record.status === 'present' ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                                            {record.status}
-                                                          </span>
-                                                      </TableCell>
-                                                      <TableCell className="text-sm text-slate-600">
-                                                        <span className="font-bold">{course?.code || 'N/A'}</span> - {course?.name || 'N/A'}
-                                                      </TableCell>
-                                                      <TableCell className="text-sm text-slate-500">{section?.name || 'N/A'}</TableCell>
-                                                      <TableCell className="text-sm text-slate-500">
-                                                          {record.timestamp ? new Date(record.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}
-                                                      </TableCell>
-                                                  </TableRow>
-                                              );
-                                          })
-                                      ) : (
-                                          <TableRow>
-                                              <TableCell colSpan={5} className="text-center text-slate-500 italic py-4">No attendance records found for this student.</TableCell>
-                                          </TableRow>
-                                      )}
-                                  </TableBody>
-                              </Table>
-                          </div>
-                      )}
+              {/* Tab Navigation */}
+              <div className="flex border-b border-slate-200">
+                <button
+                  onClick={() => setActiveTab('calendar')}
+                  className={`px-6 py-3 text-sm font-medium transition duration-200 flex items-center gap-2 ${activeTab === 'calendar' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  <CalendarIcon className="w-4 h-4" />
+                  Calendar View
+                </button>
+                <button
+                  onClick={() => setActiveTab('table')}
+                  className={`px-6 py-3 text-sm font-medium transition duration-200 flex items-center gap-2 ${activeTab === 'table' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  <List className="w-4 h-4" />
+                  Detailed Log Table ({allAttendanceRecords.length})
+                </button>
+              </div>
+
+              {/* Tab Content */}
+              <div className="pt-4">
+                {activeTab === 'calendar' && <AttendanceCalendar attendanceRecords={allAttendanceRecords} />}
+
+                {activeTab === 'table' && (
+                  <div className="overflow-x-auto max-h-96 border border-slate-200 rounded-xl shadow-inner">
+                    <Table>
+                      <TableHeader className="bg-slate-100 sticky top-0 shadow-sm z-10">
+                        <TableRow>
+                          <TableHead className="w-[150px]">Date</TableHead>
+                          <TableHead className="w-[150px]">Status</TableHead>
+                          <TableHead>Course</TableHead>
+                          <TableHead>Section</TableHead>
+                          <TableHead>Time Recorded</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {allAttendanceRecords.length > 0 ? (
+                          allAttendanceRecords.map((record, index) => {
+                            const session = record.class_sessions;
+                            const section = session?.sections;
+                            const course = section?.courses;
+
+                            return (
+                              <TableRow key={index} className="transition duration-100 ease-in-out">
+                                <TableCell className="font-medium text-slate-700">
+                                  {session?.class_date ? new Date(session.class_date).toLocaleDateString() : 'N/A'}
+                                </TableCell>
+                                <TableCell className="flex items-center gap-2 capitalize">
+                                  {getStatusIcon(record.status)}
+                                  <span className={`font-semibold ${record.status === 'absent' ? 'text-rose-600' : record.status === 'present' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                    {record.status}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="text-sm text-slate-600">
+                                  <span className="font-bold">{course?.code || 'N/A'}</span> - {course?.name || 'N/A'}
+                                </TableCell>
+                                <TableCell className="text-sm text-slate-500">{section?.name || 'N/A'}</TableCell>
+                                <TableCell className="text-sm text-slate-500">
+                                  {record.timestamp ? new Date(record.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center text-slate-500 italic py-4">No attendance records found for this student.</TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
                   </div>
-              </motion.div>
+                )}
+              </div>
+            </motion.div>
           )}
         </motion.div>
       </div>
@@ -375,4 +376,4 @@ function StudentView() {
   );
 }
 
-export default StudentView;
+export default withRole(StudentView, ["student", "admin", "lecturer"]);

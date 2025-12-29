@@ -117,18 +117,23 @@ function AddStudent() {
     }
 
     let file;
+    const fileName = `${formData.nickname || formData.matricNo}.jpg`;
+
     if (capturedImage) {
       const byteString = atob(capturedImage.split(",")[1]);
       const ab = new ArrayBuffer(byteString.length);
       const ia = new Uint8Array(ab);
       for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-      file = new File([new Blob([ia], { type: "image/jpeg" })], `${formData.matricNo}.jpg`);
-    } else file = image;
+      file = new File([new Blob([ia], { type: "image/jpeg" })], fileName);
+    } else {
+      // Create a new File object to rename the uploaded file
+      file = new File([image], fileName, { type: image.type });
+    }
 
     form.append("image", file);
 
     try {
-      const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://192.168.252.103:5000";
+      const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_PI_URL;
       const res = await axios.post(`${BASE_URL}/upload-image`, form, {
         headers: { "Content-Type": "multipart/form-data" },
       });
@@ -201,11 +206,10 @@ function AddStudent() {
 
             {message && (
               <p
-                className={`mt-4 text-center text-sm rounded-lg py-2 ${
-                  error
-                    ? "bg-rose-100 text-rose-700 border border-rose-300"
-                    : "bg-emerald-100 text-emerald-700 border border-emerald-300"
-                }`}
+                className={`mt-4 text-center text-sm rounded-lg py-2 ${error
+                  ? "bg-rose-100 text-rose-700 border border-rose-300"
+                  : "bg-emerald-100 text-emerald-700 border border-emerald-300"
+                  }`}
               >
                 {message}
               </p>
@@ -293,7 +297,7 @@ function AddStudent() {
 // ---------------------------------------------
 
 // Define the roles allowed to access this page
-const allowedRoles = ['admin', 'lecturer']; 
+const allowedRoles = ['admin', 'lecturer'];
 
 // Export the component wrapped with the role checker HOC
 export default withRole(AddStudent, allowedRoles);

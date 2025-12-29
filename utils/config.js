@@ -8,7 +8,7 @@ export function loadConfig() {
     })
     .catch((err) => {
       console.error("Failed to load runtime config:", err);
-      runtimeConfig = { apiBaseUrl: "http://localhost:5000" }; // fallback URL
+      runtimeConfig = { apiBaseUrl: process.env.NEXT_PUBLIC_PI_URL || "http://localhost:5000" }; // fallback URL
     });
 }
 

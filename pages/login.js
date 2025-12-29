@@ -10,8 +10,8 @@ export default function LoginPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const router = useRouter();
-
   const supabase = createClientComponentClient();
+
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -23,7 +23,7 @@ export default function LoginPage() {
       email,
       password,
     });
-    
+
     setIsLoggingIn(false);
 
     if (error) {
@@ -31,8 +31,26 @@ export default function LoginPage() {
       return;
     }
 
-    // 2. On successful login, redirect to a protected route
-    router.push("/"); 
+    // 2. Fetch profile to check role
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // Default redirect
+    let redirectPath = "/";
+
+    if (user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      if (profile?.role === "student") {
+        redirectPath = "/student-view";
+      }
+    }
+
+    // 3. Redirect
+    router.push(redirectPath);
   };
 
   return (

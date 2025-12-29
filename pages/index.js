@@ -12,8 +12,8 @@ function Home() {
   const [lastUpdate, setLastUpdate] = useState(null);
   const [isBackendOnline, setIsBackendOnline] = useState(true);
 
-  const videoUrl = "http://192.168.252.103:5000/video";
-  const apiBase = "http://192.168.252.103:5000";
+  const videoUrl = `${process.env.NEXT_PUBLIC_PI_URL}/video`;
+  const apiBase = process.env.NEXT_PUBLIC_PI_URL;
 
   useEffect(() => {
     const fetchData = async () => {
@@ -71,7 +71,7 @@ function Home() {
   }, []);
 
   const handleToggleStream = () => setIsPaused(!isPaused);
-  
+
   // NOTE: Replaced alert() with console.log()
   const handleEndClass = () => console.log("Class ended");
 
@@ -207,13 +207,12 @@ function Home() {
                         </p>
                       </div>
                       <span
-                        className={`px-2 py-1 rounded-md text-xs font-semibold ${
-                          record.status === "present"
-                            ? "bg-emerald-100 text-emerald-700"
-                            : record.status === "late"
+                        className={`px-2 py-1 rounded-md text-xs font-semibold ${record.status === "present"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : record.status === "late"
                             ? "bg-amber-100 text-amber-700"
                             : "bg-rose-100 text-rose-700"
-                        }`}
+                          }`}
                       >
                         {record.status === "present"
                           ? "✓ Present"
